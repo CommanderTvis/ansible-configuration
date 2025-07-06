@@ -290,4 +290,3 @@
         msg: |
           The following items were not yet ported:
           - Advanced Git/GPG/SSH agent settings
-          - Syncthing service not run
