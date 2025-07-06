@@ -80,6 +80,7 @@
         name:
           - md.obsidian.Obsidian
           - org.getoutline.OutlineManager
+          - com.system76.Popsicle
         state: present
 
     - name: Install pipx packages
@@ -276,11 +277,17 @@
               - docker-buildx-plugin
               - docker-compose-plugin
             state: present
+
+    - name: Enable service httpd and ensure it is not masked
+      become: false
+      ansible.builtin.systemd_service:
+        name: syncthing.service
+        enabled: true
+        state: started
+        scope: user
     - name: (Optional) List unported or uncertain steps
       ansible.builtin.debug:
         msg: |
           The following items were not yet ported:
-          - Outline Manager (custom AppImage extraction)
-          - JetBrains Toolbox (no official .deb or apt known)
           - Advanced Git/GPG/SSH agent settings
           - Syncthing service not run
