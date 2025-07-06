@@ -1,0 +1,322 @@
+- name: Ansible for Kubuntu
+  hosts: all
+  become: true
+  vars:
+    docker_repo_url: "https://download.docker.com/linux/ubuntu"
+    docker_repo_key_url: "https://download.docker.com/linux/ubuntu/gpg"
+  tasks:
+    ###########################################################################
+    # (Optional) Remove all packages except base Kubuntu and requested ones   #
+    # This is non-trivial; here's a placeholder approach. Adjust as needed.   #
+    ###########################################################################
+    #    - name: Mark base packages as manual (placeholder example)
+    #      shell: |
+    #        apt-mark manual $(apt list --installed 2>/dev/null | grep -i kubuntu | cut -d/ -f1)
+    #      args:
+    #        warn: false
+
+    #    - name: Remove all other packages (placeholder example)
+    #      shell: |
+    #        apt-get -y autoremove --purge
+    #      args:
+    #        warn: false
+    #      register: remove_unwanted_packages
+
+    #####################################################
+    # Ensure restricted repository is enabled for Nvidia #
+    #####################################################
+    #    - name: Enable restricted repo
+    #      apt_repository:
+    #        repo: "deb http://archive.ubuntu.com/ubuntu {{ ansible_lsb.codename }} restricted"
+    #        state: present
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install common packages
+      ansible.builtin.apt:
+        name:
+          - wget
+          - tree
+          - yakuake
+          - neofetch
+          - vlc
+          - ca-certificates
+          - curl
+          - gource
+          - git
+          - syncthing
+          - docker-compose
+          - qdirstat
+          - gimp
+          - flatpak
+          - plasma-discover-backend-flatpak
+          - kde-config-flatpak
+          - yt-dlp
+          - mpv
+          - maven
+          - postgresql
+          - software-properties-common
+          - apt-transport-https
+          - gpg
+          - libwebkit2gtk-4.1-0 # telegram
+          - pipx
+        state: present
+
+    - name: Configure pipx for user
+      ansible.builtin.command: pipx ensurepath
+      become: false
+      register: pipx_ensurepath
+      changed_when: false
+
+    - name: Add the flathub flatpak repository remote
+      community.general.flatpak_remote:
+        name: flathub
+        state: present
+        flatpakrepo_url: https://dl.flathub.org/repo/flathub.flatpakrepo
+
+    - name: Install the flatpaks
+      community.general.flatpak:
+        name:
+          - md.obsidian.Obsidian
+          - org.getoutline.OutlineManager
+        state: present
+
+    - name: Install pipx packages
+      ansible.builtin.command: pipx install ansible-dev-tools poetry uv
+      become: false
+      register: pipx_packages
+      changed_when: false
+
+    - name: Check if Tailscale is installed
+      ansible.builtin.command: dpkg -s tailscale
+      register: tailscale_check
+      failed_when: false
+      changed_when: false
+
+    - name: Install Tailscale if not installed
+      when: tailscale_check.rc != 0
+      block:
+        - name: Download Tailscale GPG key
+          ansible.builtin.shell: >
+            curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/plucky.noarmor.gpg > /usr/share/keyrings/tailscale-archive-keyring.gpg
+          args: { creates: /usr/share/keyrings/tailscale-archive-keyring.gpg }
+
+        - name: Add Tailscale repository
+          ansible.builtin.shell: >
+            curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/plucky.tailscale-keyring.list > /etc/apt/sources.list.d/tailscale.list
+          args: { creates: /etc/apt/sources.list.d/tailscale.list }
+
+        - name: Update apt cache
+          ansible.builtin.apt: { update_cache: true }
+
+        - name: Install Tailscale
+          ansible.builtin.apt:
+            name: tailscale
+            state: present
+
+    #    - name: Install Nvidia driver (proprietary)
+    #      apt:
+    #        name: "nvidia-driver-525"
+    #        state: present
+
+    ##############################################################
+    # Add Docker repository (official, not default apt) & install
+    ##############################################################
+    #    - name: Download Docker GPG key and store in keyring
+    #      ansible.builtin.get_url:
+    #        url: "{{ docker_repo_key_url }}"
+    #        dest: /usr/share/keyrings/docker-archive-keyring.gpg
+    #        mode: '0644'
+
+    #    - name: Add Docker apt repository
+    #      ansible.builtin.apt_repository:
+    #        repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] {{ docker_repo_url }} {{ ansible_lsb.codename }} stable"
+    #        state: present
+    #        filename: "docker_repo"
+
+    #    - name: Update apt cache (Docker repo)
+    #      apt:
+    #        update_cache: yes
+    #        cache_valid_time: 3600
+
+    #    - name: Install Docker engine and docker-compose
+    #      apt:
+    #        name:
+    #          - docker-ce
+    #          - docker-ce-cli
+    #          - containerd.io
+    #          - docker-compose-plugin
+    #        state: present
+
+    - name: Check if Brave browser is installed
+      ansible.builtin.command: dpkg -s brave-browser
+      register: brave_check
+      failed_when: false
+      changed_when: false
+
+    - name: Install Brave if not installed
+      block:
+        - name: Get Brave GPG key
+          ansible.builtin.shell: >
+            curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg
+            https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
+
+        - name: Add Brave browser release sources
+          ansible.builtin.shell: >
+            curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources
+            https://brave-browser-apt-release.s3.brave.com/brave-browser.sources
+
+        - name: Update apt cache
+          ansible.builtin.apt: { update_cache: true }
+
+        - name: Install Brave browser
+          ansible.builtin.apt:
+            name: brave-browser
+            state: present
+      when: brave_check.rc != 0
+
+    - name: Check if Telegram is installed
+      ansible.builtin.command: dpkg -s telegram
+      register: telegram_check
+      failed_when: false
+      changed_when: false
+
+    - name: Install Telegram from PPA if not installed
+      when: telegram_check.rc != 0
+      block:
+        - name: Add Telegram PPA repository
+          ansible.builtin.command: add-apt-repository -y ppa:atareao/telegram
+          args: { creates: /etc/apt/sources.list.d/atareao-ubuntu-telegram-*.list }
+
+        - name: Update apt cache
+          ansible.builtin.apt: { update_cache: true }
+
+        - name: Install Telegram
+          ansible.builtin.apt:
+            name: telegram
+            state: present
+
+    - name: Check if VS Code is installed
+      ansible.builtin.command: dpkg -s code
+      register: vscode_check
+      failed_when: false
+      changed_when: false
+
+    - name: Install VS Code if not installed
+      when: vscode_check.rc != 0
+      block:
+        - name: Download Microsoft GPG key
+          ansible.builtin.shell: >
+            wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /tmp/packages.microsoft.gpg
+          args: { creates: /tmp/packages.microsoft.gpg }
+
+        - name: Install Microsoft GPG key
+          ansible.builtin.shell: >
+            install -D -o root -g root -m 644 /tmp/packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg
+          args: { creates: /etc/apt/keyrings/packages.microsoft.gpg }
+
+        - name: Add VS Code repository
+          ansible.builtin.shell: >
+            echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" > /etc/apt/sources.list.d/vscode.list
+
+        - name: Remove temporary GPG key file
+          ansible.builtin.file:
+            path: /tmp/packages.microsoft.gpg
+            state: absent
+
+        - name: Update apt cache
+          ansible.builtin.apt: { update_cache: true }
+
+        - name: Install VS Code
+          ansible.builtin.apt:
+            name: code
+            state: present
+
+    - name: Check if 1Password is installed
+      ansible.builtin.command: dpkg -s 1password
+      register: onepassword_check
+      failed_when: false
+      changed_when: false
+
+    - name: Install 1Password if not installed
+      block:
+        - name: Download 1Password GPG key for APT
+          ansible.builtin.shell: >
+            curl -sS https://downloads.1password.com/linux/keys/1password.asc | 
+            gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
+          args: { creates: /usr/share/keyrings/1password-archive-keyring.gpg }
+
+        - name: Add 1Password repository
+          ansible.builtin.shell: >
+            echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/amd64 stable main' > /etc/apt/sources.list.d/1password.list
+          args: { creates: /etc/apt/sources.list.d/1password.list }
+
+        - name: Setup 1Password debsig verification
+          ansible.builtin.shell: |
+            mkdir -p /etc/debsig/policies/AC2D62742012EA22/
+            curl -sS https://downloads.1password.com/linux/debian/debsig/1password.pol > /etc/debsig/policies/AC2D62742012EA22/1password.pol
+            mkdir -p /usr/share/debsig/keyrings/AC2D62742012EA22
+            curl -sS https://downloads.1password.com/linux/keys/1password.asc | gpg --dearmor --output /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg
+          args: {creates: /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg }
+
+        - name: Update apt cache
+          ansible.builtin.apt: { update_cache: true }
+
+        - name: Install 1Password
+          ansible.builtin.apt:
+            name: 1password
+            state: present
+      when: onepassword_check.rc != 0
+    - name: Check if Docker is installed
+      ansible.builtin.command: dpkg -s docker-ce
+      register: docker_check
+      failed_when: false
+      changed_when: false
+
+    - name: Install Docker if not installed
+      when: docker_check.rc != 0
+      block:
+        - name: Create Docker keyring directory
+          ansible.builtin.file:
+            path: /etc/apt/keyrings
+            state: directory
+            mode: '0755'
+
+        - name: Download Docker GPG key
+          ansible.builtin.shell: >
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+          args: { creates: /etc/apt/keyrings/docker.asc }
+
+        - name: Set Docker GPG key permissions
+          ansible.builtin.file:
+            path: /etc/apt/keyrings/docker.asc
+            mode: '0644'
+
+        - name: Add Docker repository
+          ansible.builtin.shell: >
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" > /etc/apt/sources.list.d/docker.list
+          args: { creates: /etc/apt/sources.list.d/docker.list }
+
+        - name: Update apt cache
+          ansible.builtin.apt: { update_cache: true }
+
+        - name: Install Docker packages
+          ansible.builtin.apt:
+            name:
+              - docker-ce
+              - docker-ce-cli
+              - containerd.io
+              - docker-buildx-plugin
+              - docker-compose-plugin
+            state: present
+    - name: (Optional) List unported or uncertain steps
+      ansible.builtin.debug:
+        msg: |
+          The following items were not yet ported:
+          - Outline Manager (custom AppImage extraction)
+          - JetBrains Toolbox (no official .deb or apt known)
+          - Advanced Git/GPG/SSH agent settings
+          - Syncthing service not run
