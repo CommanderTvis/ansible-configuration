@@ -1,9 +1,6 @@
 - name: Ansible for Kubuntu
   hosts: all
   become: true
-  vars:
-    docker_repo_url: "https://download.docker.com/linux/ubuntu"
-    docker_repo_key_url: "https://download.docker.com/linux/ubuntu/gpg"
   tasks:
     ###########################################################################
     # (Optional) Remove all packages except base Kubuntu and requested ones   #
@@ -45,7 +42,6 @@
           - gource
           - git
           - syncthing
-          - docker-compose
           - qdirstat
           - gimp
           - flatpak
@@ -54,7 +50,7 @@
           - yt-dlp
           - mpv
           - maven
-          - postgresql
+          - postgresql-client-17
           - software-properties-common
           - apt-transport-https
           - gpg
@@ -278,14 +274,14 @@
               - docker-compose-plugin
             state: present
 
-    - name: Enable service httpd and ensure it is not masked
+    - name: Enable service Syncthing
       become: false
       ansible.builtin.systemd_service:
         name: syncthing.service
         enabled: true
         state: started
         scope: user
-    - name: (Optional) List unported or uncertain steps
+    - name: List unported or uncertain steps
       ansible.builtin.debug:
         msg: |
           The following items were not yet ported:
