@@ -1,3 +1,4 @@
+---
 - name: Ansible for Kubuntu
   hosts: all
   become: true
@@ -29,7 +30,7 @@
         update_cache: true
         cache_valid_time: 3600
 
-    - name: Install common packages
+    - name: Install standard APT packages
       ansible.builtin.apt:
         name:
           - wget
@@ -57,7 +58,23 @@
           - libwebkit2gtk-4.1-0 # telegram
           - pipx
           - nvidia-driver-570
-        state: present
+          - nodejs
+          - npm
+          - okular
+        state: latest
+
+    - name: Remove unnecessary default packages
+      ansible.builtin.apt:
+        name: [ kate ]
+        state: absent
+        autoremove: yes
+        purge: true
+
+    - name: Install gemini-cli
+      community.general.npm:
+        name: '@google/gemini-cli'
+        global: true
+        state: latest
 
     - name: Configure pipx for user
       ansible.builtin.command: pipx ensurepath
@@ -65,25 +82,28 @@
       register: pipx_ensurepath
       changed_when: false
 
+    - name: Install pipx packages
+      become: false
+      vars: { pipx_packages: [ ansible-dev-tools, poetry, uv ] }
+      community.general.pipx:
+        name: "{{ item }}"
+        state: latest
+      with_items: "{{ pipx_packages }}"
+
     - name: Add the flathub flatpak repository remote
       community.general.flatpak_remote:
         name: flathub
         state: present
         flatpakrepo_url: https://dl.flathub.org/repo/flathub.flatpakrepo
 
-    - name: Install the flatpaks
+    - name: Install flatpaks
       community.general.flatpak:
         name:
           - md.obsidian.Obsidian
           - org.getoutline.OutlineManager
           - com.system76.Popsicle
-        state: present
-
-    - name: Install pipx packages
-      ansible.builtin.command: pipx install ansible-dev-tools poetry uv
-      become: false
-      register: pipx_packages
-      changed_when: false
+          - com.discordapp.Discord
+        state: latest
 
     - name: Check if Tailscale is installed
       ansible.builtin.command: dpkg -s tailscale
@@ -104,13 +124,11 @@
             curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/plucky.tailscale-keyring.list > /etc/apt/sources.list.d/tailscale.list
           args: { creates: /etc/apt/sources.list.d/tailscale.list }
 
-        - name: Update apt cache
-          ansible.builtin.apt: { update_cache: true }
-
         - name: Install Tailscale
           ansible.builtin.apt:
+            update_cache: true
             name: tailscale
-            state: present
+            state: latest
 
     - name: Check if Brave browser is installed
       ansible.builtin.command: dpkg -s brave-browser
@@ -130,13 +148,11 @@
             curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources
             https://brave-browser-apt-release.s3.brave.com/brave-browser.sources
 
-        - name: Update apt cache
-          ansible.builtin.apt: { update_cache: true }
-
         - name: Install Brave browser
           ansible.builtin.apt:
+            update_cache: true
             name: brave-browser
-            state: present
+            state: latest
       when: brave_check.rc != 0
 
     - name: Check if Telegram is installed
@@ -152,13 +168,11 @@
           ansible.builtin.command: add-apt-repository -y ppa:atareao/telegram
           args: { creates: /etc/apt/sources.list.d/atareao-ubuntu-telegram-*.list }
 
-        - name: Update apt cache
-          ansible.builtin.apt: { update_cache: true }
-
         - name: Install Telegram
           ansible.builtin.apt:
+            update_cache: true
             name: telegram
-            state: present
+            state: latest
 
     - name: Check if VS Code is installed
       ansible.builtin.command: dpkg -s code
@@ -183,18 +197,11 @@
           ansible.builtin.shell: >
             echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" > /etc/apt/sources.list.d/vscode.list
 
-        - name: Remove temporary GPG key file
-          ansible.builtin.file:
-            path: /tmp/packages.microsoft.gpg
-            state: absent
-
-        - name: Update apt cache
-          ansible.builtin.apt: { update_cache: true }
-
         - name: Install VS Code
           ansible.builtin.apt:
+            update_cache: true
             name: code
-            state: present
+            state: latest
 
     - name: Check if 1Password is installed
       ansible.builtin.command: dpkg -s 1password
@@ -223,14 +230,13 @@
             curl -sS https://downloads.1password.com/linux/keys/1password.asc | gpg --dearmor --output /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg
           args: { creates: /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg }
 
-        - name: Update apt cache
-          ansible.builtin.apt: { update_cache: true }
-
         - name: Install 1Password
           ansible.builtin.apt:
+            update_cache: true
             name: [ 1password, 1password-cli ]
-            state: present
+            state: latest
       when: onepassword_check.rc != 0
+
     - name: Check if Docker is installed
       ansible.builtin.command: dpkg -s docker-ce
       register: docker_check
@@ -261,18 +267,16 @@
             echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" > /etc/apt/sources.list.d/docker.list
           args: { creates: /etc/apt/sources.list.d/docker.list }
 
-        - name: Update apt cache
-          ansible.builtin.apt: { update_cache: true }
-
         - name: Install Docker packages
           ansible.builtin.apt:
+            update_cache: true
             name:
               - docker-ce
               - docker-ce-cli
               - containerd.io
               - docker-buildx-plugin
               - docker-compose-plugin
-            state: present
+            state: latest
 
     - name: Enable service Syncthing
       become: false
@@ -281,8 +285,9 @@
         enabled: true
         state: started
         scope: user
+
     - name: List unported or uncertain steps
       ansible.builtin.debug:
         msg: |
           The following items were not yet ported:
-          - Advanced Git/GPG/SSH agent settings
+          - Advanced Git/GPG agent settings
