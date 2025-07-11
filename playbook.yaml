@@ -273,6 +273,7 @@
         scope: global
         value: "{{ item.value }}"
       loop:
+        - { name: init.defaultBranch, value: "master" }
         - { name: user.name, value: "Iaroslav Postovalov" }
         - { name: user.email, value: "postovalovya@gmail.com" }
         - { name: core.autocrlf, value: "input" }
