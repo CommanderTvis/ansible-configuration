@@ -281,9 +281,3 @@
         - { name: gpg.ssh.program, value: "/opt/1Password/op-ssh-sign" }
         - { name: commit.gpgsign, value: "true" }
       failed_when: "'/opt/1Password/op-ssh-sign' is not file"
-
-    - name: List unported or uncertain steps
-      ansible.builtin.debug:
-        msg: |
-          The following items were not yet ported:
-          - Advanced Git/GPG agent settings
