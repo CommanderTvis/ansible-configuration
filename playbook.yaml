@@ -1,8 +1,13 @@
 ---
-- name: Ansible for Kubuntu
+- name: Ansible for Kubuntu 25.04
   hosts: all
   become: true
+  vars:
+    ansible_python_interpreter: /usr/bin/python3.13
   tasks:
+    - name: Gathering Package Facts
+      ansible.builtin.package_facts: { manager: apt }
+
     ###########################################################################
     # (Optional) Remove all packages except base Kubuntu and requested ones   #
     # This is non-trivial; here's a placeholder approach. Adjust as needed.   #
@@ -25,14 +30,17 @@
         repo: "deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }} restricted"
         state: present
 
-    - name: Update apt cache
+    - name: Install standard APT packages
       ansible.builtin.apt:
         update_cache: true
         cache_valid_time: 3600
-
-    - name: Install standard APT packages
-      ansible.builtin.apt:
         name:
+          - init
+          - bash
+          - ubuntu-minimal
+          - kubuntu-desktop
+          - language-pack-en-base
+          - language-pack-en
           - wget
           - tree
           - yakuake
@@ -105,14 +113,8 @@
           - com.discordapp.Discord
         state: latest
 
-    - name: Check if Tailscale is installed
-      ansible.builtin.command: dpkg -s tailscale
-      register: tailscale_check
-      failed_when: false
-      changed_when: false
-
     - name: Install Tailscale if not installed
-      when: tailscale_check.rc != 0
+      when: "'tailscale' not in ansible_facts.packages"
       block:
         - name: Download Tailscale GPG key
           ansible.builtin.shell: >
@@ -130,13 +132,8 @@
             name: tailscale
             state: latest
 
-    - name: Check if Brave browser is installed
-      ansible.builtin.command: dpkg -s brave-browser
-      register: brave_check
-      failed_when: false
-      changed_when: false
-
     - name: Install Brave if not installed
+      when: "'brave-browser' not in ansible_facts.packages"
       block:
         - name: Get Brave GPG key
           ansible.builtin.shell: >
@@ -153,16 +150,9 @@
             update_cache: true
             name: brave-browser
             state: latest
-      when: brave_check.rc != 0
-
-    - name: Check if Telegram is installed
-      ansible.builtin.command: dpkg -s telegram
-      register: telegram_check
-      failed_when: false
-      changed_when: false
 
     - name: Install Telegram from PPA if not installed
-      when: telegram_check.rc != 0
+      when: "'telegram' not in ansible_facts.packages"
       block:
         - name: Add Telegram PPA repository
           ansible.builtin.command: add-apt-repository -y ppa:atareao/telegram
@@ -174,14 +164,8 @@
             name: telegram
             state: latest
 
-    - name: Check if VS Code is installed
-      ansible.builtin.command: dpkg -s code
-      register: vscode_check
-      failed_when: false
-      changed_when: false
-
     - name: Install VS Code if not installed
-      when: vscode_check.rc != 0
+      when: "'code' not in ansible_facts.packages"
       block:
         - name: Download Microsoft GPG key
           ansible.builtin.shell: >
@@ -203,13 +187,8 @@
             name: code
             state: latest
 
-    - name: Check if 1Password is installed
-      ansible.builtin.command: dpkg -s 1password
-      register: onepassword_check
-      failed_when: false
-      changed_when: false
-
     - name: Install 1Password if not installed
+      when: "'1password' not in ansible_facts.packages"
       block:
         - name: Download 1Password GPG key for APT
           ansible.builtin.shell: >
@@ -235,16 +214,9 @@
             update_cache: true
             name: [ 1password, 1password-cli ]
             state: latest
-      when: onepassword_check.rc != 0
-
-    - name: Check if Docker is installed
-      ansible.builtin.command: dpkg -s docker-ce
-      register: docker_check
-      failed_when: false
-      changed_when: false
 
     - name: Install Docker if not installed
-      when: docker_check.rc != 0
+      when: "'docker-ce' not in ansible_facts.packages"
       block:
         - name: Create Docker keyring directory
           ansible.builtin.file:
@@ -277,6 +249,9 @@
               - docker-buildx-plugin
               - docker-compose-plugin
             state: latest
+
+    - name: Upgrade APT packages
+      ansible.builtin.apt: { upgrade: full }
 
     - name: Enable service Syncthing
       become: false
