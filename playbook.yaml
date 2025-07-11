@@ -37,7 +37,9 @@
         name:
           - init
           - bash
+          - linux-generic
           - ubuntu-minimal
+          - ubuntu-standard
           - kubuntu-desktop
           - language-pack-en-base
           - language-pack-en
@@ -69,6 +71,7 @@
           - nodejs
           - npm
           - okular
+          - fonts-jetbrains-mono
         state: latest
 
     - name: Remove unnecessary default packages
@@ -85,8 +88,9 @@
         state: latest
 
     - name: Configure pipx for user
-      ansible.builtin.command: pipx ensurepath
       become: false
+      ansible.builtin.command: pipx ensurepath
+
       register: pipx_ensurepath
       changed_when: false
 
@@ -111,6 +115,7 @@
           - org.getoutline.OutlineManager
           - com.system76.Popsicle
           - com.discordapp.Discord
+          - us.zoom.Zoom
         state: latest
 
     - name: Install Tailscale if not installed
@@ -260,6 +265,22 @@
         enabled: true
         state: started
         scope: user
+
+    - name: Configure global Git config
+      become: false
+      community.general.git_config:
+        name: "{{ item.name }}"
+        scope: global
+        value: "{{ item.value }}"
+      loop:
+        - { name: user.name, value: "Iaroslav Postovalov" }
+        - { name: user.email, value: "postovalovya@gmail.com" }
+        - { name: core.autocrlf, value: "input" }
+        - { name: user.signingkey, value: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPhrNPHMWPV7gGuPheIX4POXrlPNNL2h/KMAJsAuSA0W" }
+        - { name: gpg.format, value: "ssh" }
+        - { name: gpg.ssh.program, value: "/opt/1Password/op-ssh-sign" }
+        - { name: commit.gpgsign, value: "true" }
+      failed_when: "'/opt/1Password/op-ssh-sign' is not file"
 
     - name: List unported or uncertain steps
       ansible.builtin.debug:
