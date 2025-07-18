@@ -8,22 +8,7 @@
     - name: Gathering Package Facts
       ansible.builtin.package_facts: { manager: apt }
 
-    ###########################################################################
-    # (Optional) Remove all packages except base Kubuntu and requested ones   #
-    # This is non-trivial; here's a placeholder approach. Adjust as needed.   #
-    ###########################################################################
-    #    - name: Mark base packages as manual (placeholder example)
-    #      shell: |
-    #        apt-mark manual $(apt list --installed 2>/dev/null | grep -i kubuntu | cut -d/ -f1)
-    #      args:
-    #        warn: false
-
-    #    - name: Remove all other packages (placeholder example)
-    #      shell: |
-    #        apt-get -y autoremove --purge
-    #      args:
-    #        warn: false
-    #      register: remove_unwanted_packages
+    # TODO remove all packages except the base system and that are managed by this playbook
 
     - name: Enable the Ubuntu restricted repository
       apt_repository:
@@ -65,14 +50,13 @@
           - software-properties-common
           - apt-transport-https
           - gpg
-          - libwebkit2gtk-4.1-0 # telegram
           - pipx
           - nvidia-driver-570
           - nodejs
           - npm
           - okular
           - fonts-jetbrains-mono
-        state: latest
+        state: present
 
     - name: Remove unnecessary default packages
       ansible.builtin.apt:
@@ -114,8 +98,6 @@
           - md.obsidian.Obsidian
           - org.getoutline.OutlineManager
           - com.system76.Popsicle
-          - com.discordapp.Discord
-          - us.zoom.Zoom
         state: latest
 
     - name: Install Tailscale if not installed
@@ -156,19 +138,6 @@
             name: brave-browser
             state: latest
 
-    - name: Install Telegram from PPA if not installed
-      when: "'telegram' not in ansible_facts.packages"
-      block:
-        - name: Add Telegram PPA repository
-          ansible.builtin.command: add-apt-repository -y ppa:atareao/telegram
-          args: { creates: /etc/apt/sources.list.d/atareao-ubuntu-telegram-*.list }
-
-        - name: Install Telegram
-          ansible.builtin.apt:
-            update_cache: true
-            name: telegram
-            state: latest
-
     - name: Install VS Code if not installed
       when: "'code' not in ansible_facts.packages"
       block:
@@ -190,7 +159,7 @@
           ansible.builtin.apt:
             update_cache: true
             name: code
-            state: latest
+            state: present
 
     - name: Install 1Password if not installed
       when: "'1password' not in ansible_facts.packages"
@@ -218,7 +187,7 @@
           ansible.builtin.apt:
             update_cache: true
             name: [ 1password, 1password-cli ]
-            state: latest
+            state: present
 
     - name: Install Docker if not installed
       when: "'docker-ce' not in ansible_facts.packages"
@@ -253,7 +222,7 @@
               - containerd.io
               - docker-buildx-plugin
               - docker-compose-plugin
-            state: latest
+            state: present
 
     - name: Upgrade APT packages
       ansible.builtin.apt: { upgrade: full }
