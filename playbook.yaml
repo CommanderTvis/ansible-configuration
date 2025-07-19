@@ -71,21 +71,6 @@
         global: true
         state: latest
 
-    - name: Configure pipx for user
-      become: false
-      ansible.builtin.command: pipx ensurepath
-
-      register: pipx_ensurepath
-      changed_when: false
-
-    - name: Install pipx packages
-      become: false
-      vars: { pipx_packages: [ ansible-dev-tools, poetry, uv ] }
-      community.general.pipx:
-        name: "{{ item }}"
-        state: latest
-      with_items: "{{ pipx_packages }}"
-
     - name: Add the flathub flatpak repository remote
       community.general.flatpak_remote:
         name: flathub
@@ -98,6 +83,8 @@
           - md.obsidian.Obsidian
           - org.getoutline.OutlineManager
           - com.system76.Popsicle
+          - org.telegram.desktop
+          - net.ankiweb.Anki
         state: latest
 
     - name: Install Tailscale if not installed
@@ -226,6 +213,21 @@
 
     - name: Upgrade APT packages
       ansible.builtin.apt: { upgrade: full }
+
+    - name: Configure pipx for user
+      become: false
+      ansible.builtin.command: pipx ensurepath
+
+      register: pipx_ensurepath
+      changed_when: false
+
+    - name: Install pipx packages
+      become: false
+      vars: { pipx_packages: [ ansible-dev-tools, poetry, uv ] }
+      community.general.pipx:
+        name: "{{ item }}"
+        state: latest
+      with_items: "{{ pipx_packages }}"
 
     - name: Enable service Syncthing
       become: false
