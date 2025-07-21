@@ -48,6 +48,7 @@
           - balenaetcher
           - jetbrains-toolbox
           - alt-tab
+          - zulip
         state: latest
         accept_external_apps: true
 
