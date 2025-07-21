@@ -1,0 +1,87 @@
+---
+- name: Ansible for macOS with Homebrew
+  hosts: all
+  become: false
+  tasks:
+    - name: Update Homebrew and install formula packages
+      community.general.homebrew:
+        update_homebrew: true
+        name:
+          - wget
+          - tree
+          - git
+          - maven
+          - postgresql
+          - curl
+          - node
+          - npm
+          - pipx
+          - yt-dlp
+          - neofetch
+          - gource
+        state: latest
+
+    - name: Install Homebrew cask applications
+      community.general.homebrew_cask:
+        name:
+          - visual-studio-code
+          - brave-browser
+          - 1password
+          - 1password-cli
+          - vlc
+          - gimp
+          - syncthing
+          - qdirstat
+          - telegram
+          - anki
+          - obsidian
+          - outline-manager
+          - tailscale
+          - font-jetbrains-mono
+          - balenaetcher
+        state: latest
+        accept_external_apps: true
+
+    - name: Install gemini-cli via npm
+      community.general.npm:
+        name: '@google/gemini-cli'
+        global: true
+        state: latest
+
+    - name: Configure pipx for user
+      ansible.builtin.command: pipx ensurepath
+      register: pipx_ensurepath
+      changed_when: false
+
+    - name: Install pipx packages
+      vars: { pipx_packages: [ ansible-dev-tools, poetry, uv ] }
+      community.general.pipx:
+        name: "{{ item }}"
+        state: latest
+      with_items: "{{ pipx_packages }}"
+
+    - name: Configure global Git config
+      community.general.git_config:
+        name: "{{ item.name }}"
+        scope: global
+        value: "{{ item.value }}"
+      loop:
+        - { name: init.defaultBranch, value: "master" }
+        - { name: user.name, value: "Iaroslav Postovalov" }
+        - { name: user.email, value: "postovalovya@gmail.com" }
+        - { name: core.autocrlf, value: "input" }
+        - { name: user.signingkey, value: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPhrNPHMWPV7gGuPheIX4POXrlPNNL2h/KMAJsAuSA0W" }
+        - { name: gpg.format, value: "ssh" }
+        - { name: gpg.ssh.program, value: "/Applications/1Password 7 - Password Manager.app/Contents/Resources/op-ssh-sign" }
+        - { name: commit.gpgsign, value: "true" }
+
+# Components that could not be ported or need verification:
+#
+# 1. UNCERTAIN - Desktop environment packages:
+#    - yakuake: KDE terminal emulator - use iTerm2
+#
+# 2. SERVICES:
+#    - Syncthing service: On macOS would need to be configured as LaunchAgent, not systemd
+#
+# 3. PATH and SSH signing:
+#    - 1Password SSH signing path will be different on macOS
