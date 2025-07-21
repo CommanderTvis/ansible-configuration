@@ -49,8 +49,10 @@
           - jetbrains-toolbox
           - alt-tab
           - zulip
+          - docker
         state: latest
         accept_external_apps: true
+        sudo_password: "{{ ansible_become_pass }}"
 
     - name: Install gemini-cli via npm
       community.general.npm:
