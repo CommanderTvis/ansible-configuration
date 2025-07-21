@@ -45,6 +45,7 @@
           - tailscale
           - font-jetbrains-mono
           - balenaetcher
+          - jetbrains-toolbox
         state: latest
         accept_external_apps: true
 
