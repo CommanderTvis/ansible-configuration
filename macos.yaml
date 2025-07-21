@@ -2,10 +2,11 @@
 - name: Ansible for macOS with Homebrew
   hosts: all
   become: false
+  vars:
+    ansible_python_interpreter: /opt/homebrew/bin/python3.13
   tasks:
     - name: Update Homebrew
-      community.general.homebrew:
-        update_homebrew: true
+      community.general.homebrew: { update_homebrew: true }
 
     - name: Install Homebrew formula packages
       vars:
@@ -46,6 +47,7 @@
           - font-jetbrains-mono
           - balenaetcher
           - jetbrains-toolbox
+          - alt-tab
         state: latest
         accept_external_apps: true
 
@@ -67,6 +69,7 @@
           - poetry
           - uv
       community.general.pipx:
+        executable: /opt/homebrew/bin/pipx
         name: "{{ item }}"
         state: latest
       loop: "{{ pipx_packages }}"
@@ -83,16 +86,10 @@
         - { name: core.autocrlf, value: "input" }
         - { name: user.signingkey, value: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPhrNPHMWPV7gGuPheIX4POXrlPNNL2h/KMAJsAuSA0W" }
         - { name: gpg.format, value: "ssh" }
-        - { name: gpg.ssh.program, value: "/Applications/1Password 7 - Password Manager.app/Contents/Resources/op-ssh-sign" }
+        - { name: gpg.ssh.program, value: "/Applications/1Password.app/Contents/MacOS/op-ssh-sign" }
         - { name: commit.gpgsign, value: "true" }
 
 # Components that could not be ported or need verification:
 #
 # 1. UNCERTAIN - Desktop environment packages:
 #    - yakuake: KDE terminal emulator - use iTerm2
-#
-# 2. SERVICES:
-#    - Syncthing service: On macOS would need to be configured as LaunchAgent, not systemd
-#
-# 3. PATH and SSH signing:
-#    - 1Password SSH signing path will be different on macOS
