@@ -79,6 +79,7 @@
           - com.system76.Popsicle
           - org.telegram.desktop
           - net.ankiweb.Anki
+          - org.zulip.Zulip
         state: latest
 
     - name: Install Tailscale if not installed
