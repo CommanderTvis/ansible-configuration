@@ -15,7 +15,7 @@
           - tree
           - git
           - maven
-          - postgresql@17
+          - postgresql@14
           - curl
           - node
           - npm
