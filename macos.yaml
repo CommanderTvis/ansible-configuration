@@ -3,10 +3,13 @@
   hosts: all
   become: false
   tasks:
-    - name: Update Homebrew and install formula packages
+    - name: Update Homebrew
       community.general.homebrew:
         update_homebrew: true
-        name:
+
+    - name: Install Homebrew formula packages
+      vars:
+        homebrew_packages:
           - wget
           - tree
           - git
@@ -19,7 +22,10 @@
           - yt-dlp
           - neofetch
           - gource
+      community.general.homebrew:
+        name: "{{ item }}"
         state: latest
+      loop: "{{ homebrew_packages }}"
 
     - name: Install Homebrew cask applications
       community.general.homebrew_cask:
@@ -54,11 +60,15 @@
       changed_when: false
 
     - name: Install pipx packages
-      vars: { pipx_packages: [ ansible-dev-tools, poetry, uv ] }
+      vars:
+        pipx_packages:
+          - ansible-dev-tools
+          - poetry
+          - uv
       community.general.pipx:
         name: "{{ item }}"
         state: latest
-      with_items: "{{ pipx_packages }}"
+      loop: "{{ pipx_packages }}"
 
     - name: Configure global Git config
       community.general.git_config:
