@@ -248,7 +248,8 @@
         - { name: user.name, value: "Iaroslav Postovalov" }
         - { name: user.email, value: "postovalovya@gmail.com" }
         - { name: core.autocrlf, value: "input" }
-        - { name: user.signingkey, value: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPhrNPHMWPV7gGuPheIX4POXrlPNNL2h/KMAJsAuSA0W" }
+        - name: user.signingkey
+          value: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPhrNPHMWPV7gGuPheIX4POXrlPNNL2h/KMAJsAuSA0W"
         - { name: gpg.format, value: "ssh" }
         - { name: gpg.ssh.program, value: "/opt/1Password/op-ssh-sign" }
         - { name: commit.gpgsign, value: "true" }

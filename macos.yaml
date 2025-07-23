@@ -1,28 +1,49 @@
 ---
 - name: Ansible for macOS with Homebrew
   hosts: all
-  become: false
   vars:
     ansible_python_interpreter: /opt/homebrew/bin/python3.13
+    homebrew_packages:
+      - ansible
+      - wget
+      - tree
+      - git
+      - maven
+      - postgresql@14
+      - curl
+      - node
+      - npm
+      - pipx
+      - yt-dlp
+      - neofetch
+      - gource
+      - jq
+    homebrew_cask_apps:
+      - visual-studio-code
+      - brave-browser
+      - 1password
+      - 1password-cli
+      - vlc
+      - gimp
+      - syncthing-app
+      - qdirstat
+      - telegram
+      - anki
+      - obsidian
+      - outline-manager
+      - tailscale-app
+      - font-jetbrains-mono
+      - balenaetcher
+      - jetbrains-toolbox
+      - alt-tab
+      - zulip
+      - docker-desktop
+      - iterm2
   tasks:
     - name: Update Homebrew
       community.general.homebrew: { update_homebrew: true }
 
     - name: Install Homebrew formula packages
-      vars:
-        homebrew_packages:
-          - wget
-          - tree
-          - git
-          - maven
-          - postgresql@14
-          - curl
-          - node
-          - npm
-          - pipx
-          - yt-dlp
-          - neofetch
-          - gource
       community.general.homebrew:
         name: "{{ item }}"
         state: latest
@@ -30,29 +51,9 @@
 
     - name: Install Homebrew cask applications
       community.general.homebrew_cask:
-        name:
-          - visual-studio-code
-          - brave-browser
-          - 1password
-          - 1password-cli
-          - vlc
-          - gimp
-          - syncthing
-          - qdirstat
-          - telegram
-          - anki
-          - obsidian
-          - outline-manager
-          - tailscale
-          - font-jetbrains-mono
-          - balenaetcher
-          - jetbrains-toolbox
-          - alt-tab
-          - zulip
-          - docker
+        name: "{{ homebrew_cask_apps }}"
         state: latest
         accept_external_apps: true
-        sudo_password: "{{ ansible_become_pass }}"
 
     - name: Install gemini-cli via npm
       community.general.npm:
@@ -87,12 +88,39 @@
         - { name: user.name, value: "Iaroslav Postovalov" }
         - { name: user.email, value: "postovalovya@gmail.com" }
         - { name: core.autocrlf, value: "input" }
-        - { name: user.signingkey, value: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPhrNPHMWPV7gGuPheIX4POXrlPNNL2h/KMAJsAuSA0W" }
+        - name: user.signingkey
+          value: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPhrNPHMWPV7gGuPheIX4POXrlPNNL2h/KMAJsAuSA0W"
         - { name: gpg.format, value: "ssh" }
         - { name: gpg.ssh.program, value: "/Applications/1Password.app/Contents/MacOS/op-ssh-sign" }
         - { name: commit.gpgsign, value: "true" }
 
-# Components that could not be ported or need verification:
-#
-# 1. UNCERTAIN - Desktop environment packages:
-#    - yakuake: KDE terminal emulator - use iTerm2
+    - name: Gather installed packages and dependencies
+      block:
+        - ansible.builtin.command: brew list --formula -1
+          register: installed_formulae
+          changed_when: false
+        - ansible.builtin.command: brew list --cask -1
+          register: installed_casks
+          changed_when: false
+        - ansible.builtin.shell: "brew deps --union --include-build --include-optional {{ homebrew_packages | join(' ') }}"
+          register: managed_deps
+          changed_when: false
+          failed_when: false
+
+    - name: Prune unmanaged packages
+      vars:
+        installed: "{{ installed_formulae.stdout_lines + installed_casks.stdout_lines }}"
+        managed: "{{ homebrew_packages + homebrew_cask_apps }}"
+        dependencies: "{{ managed_deps.stdout_lines | default([]) }}"
+        unmanaged: "{{ installed | difference(managed + dependencies) }}"
+      block:
+        - ansible.builtin.pause:
+            prompt: |
+              The following unmanaged packages will be pruned:
+              {{ unmanaged | to_nice_yaml }}
+              Press Enter to continue, or Ctrl+C and then 'A' to abort.
+        - community.general.homebrew:
+            name: "{{ item }}"
+            state: absent
+          loop: "{{ unmanaged }}"
+      when: unmanaged is defined and unmanaged | length > 0
