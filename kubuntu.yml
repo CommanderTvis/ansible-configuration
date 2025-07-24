@@ -11,7 +11,7 @@
     # TODO remove all packages except the base system and that are managed by this playbook
 
     - name: Enable the Ubuntu restricted repository
-      apt_repository:
+      ansible.builtin.apt_repository:
         repo: "deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }} restricted"
         state: present
 
@@ -20,6 +20,8 @@
         update_cache: true
         cache_valid_time: 3600
         name:
+          - ansible
+          - ansible-lint
           - init
           - bash
           - linux-generic
@@ -52,8 +54,6 @@
           - gpg
           - pipx
           - nvidia-driver-570
-          - nodejs
-          - npm
           - okular
           - fonts-jetbrains-mono
         state: present
@@ -62,14 +62,8 @@
       ansible.builtin.apt:
         name: [ kate ]
         state: absent
-        autoremove: yes
+        autoremove: true
         purge: true
-
-    - name: Install gemini-cli
-      community.general.npm:
-        name: '@google/gemini-cli'
-        global: true
-        state: latest
 
     - name: Add the flathub flatpak repository remote
       community.general.flatpak_remote:
@@ -104,7 +98,7 @@
           ansible.builtin.apt:
             update_cache: true
             name: tailscale
-            state: latest
+            state: present
 
     - name: Install Brave if not installed
       when: "'brave-browser' not in ansible_facts.packages"
@@ -123,7 +117,7 @@
           ansible.builtin.apt:
             update_cache: true
             name: brave-browser
-            state: latest
+            state: present
 
     - name: Install VS Code if not installed
       when: "'code' not in ansible_facts.packages"
@@ -153,7 +147,7 @@
       block:
         - name: Download 1Password GPG key for APT
           ansible.builtin.shell: >
-            curl -sS https://downloads.1password.com/linux/keys/1password.asc | 
+            curl -sS https://downloads.1password.com/linux/keys/1password.asc |
             gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
           args: { creates: /usr/share/keyrings/1password-archive-keyring.gpg }
 
@@ -173,7 +167,9 @@
         - name: Install 1Password
           ansible.builtin.apt:
             update_cache: true
-            name: [ 1password, 1password-cli ]
+            name:
+              - 1password
+              - 1password-cli
             state: present
 
     - name: Install Docker if not installed
@@ -223,7 +219,10 @@
 
     - name: Install pipx packages
       become: false
-      vars: { pipx_packages: [ ansible-dev-tools, poetry, uv ] }
+      vars:
+        pipx_packages:
+          - poetry
+          - uv
       community.general.pipx:
         name: "{{ item }}"
         state: latest

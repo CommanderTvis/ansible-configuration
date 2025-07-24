@@ -3,7 +3,7 @@ set -e
 
 # Check OS and set playbook
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    PLAYBOOK="macos.yaml"
+    PLAYBOOK="macos.yml"
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
     # Check Ubuntu version
     if ! grep -q "Ubuntu 25.04" /etc/os-release; then
@@ -15,7 +15,7 @@ elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
         echo "Error: Kubuntu desktop environment required"
         exit 1
     fi
-    PLAYBOOK="kubuntu.yaml"
+    PLAYBOOK="kubuntu.yml"
 else
     echo "Error: Unsupported operating system"
     exit 1
@@ -29,7 +29,7 @@ if ! command -v ansible-playbook >/dev/null 2>&1; then
         sudo apt update
         sudo apt install -y ansible
     fi
-    ansible-galaxy collection install community.general
+    ansible-galaxy install -r requirements.yml
 fi
 
 # Run ansible-playbook with OS-specific options

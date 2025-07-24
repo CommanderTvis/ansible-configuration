@@ -5,19 +5,17 @@
     ansible_python_interpreter: /opt/homebrew/bin/python3.13
     homebrew_packages:
       - ansible
+      - ansible-lint
       - wget
       - tree
       - git
       - maven
       - postgresql@14
       - curl
-      - node
-      - npm
       - pipx
       - yt-dlp
       - neofetch
       - gource
-      - jq
     homebrew_cask_apps:
       - visual-studio-code
       - brave-browser
@@ -55,12 +53,6 @@
         state: latest
         accept_external_apps: true
 
-    - name: Install gemini-cli via npm
-      community.general.npm:
-        name: '@google/gemini-cli'
-        global: true
-        state: latest
-
     - name: Configure pipx for user
       ansible.builtin.command: pipx ensurepath
       register: pipx_ensurepath
@@ -69,7 +61,6 @@
     - name: Install pipx packages
       vars:
         pipx_packages:
-          - ansible-dev-tools
           - poetry
           - uv
       community.general.pipx:
@@ -96,13 +87,16 @@
 
     - name: Gather installed packages and dependencies
       block:
-        - ansible.builtin.command: brew list --formula -1
+        - name: List installed formulae
+          ansible.builtin.command: brew list --formula -1
           register: installed_formulae
           changed_when: false
-        - ansible.builtin.command: brew list --cask -1
+        - name: List installed casks
+          ansible.builtin.command: brew list --cask -1
           register: installed_casks
           changed_when: false
-        - ansible.builtin.shell: "brew deps --union --include-build --include-optional {{ homebrew_packages | join(' ') }}"
+        - name: Gather managed dependencies
+          ansible.builtin.command: "brew deps --union --include-build --include-optional {{ homebrew_packages | join(' ') }}"
           register: managed_deps
           changed_when: false
           failed_when: false
@@ -113,14 +107,17 @@
         managed: "{{ homebrew_packages + homebrew_cask_apps }}"
         dependencies: "{{ managed_deps.stdout_lines | default([]) }}"
         unmanaged: "{{ installed | difference(managed + dependencies) }}"
+      when: unmanaged is defined and unmanaged | length > 0
       block:
-        - ansible.builtin.pause:
+        - name: Confirm pruning
+          ansible.builtin.pause:
             prompt: |
               The following unmanaged packages will be pruned:
               {{ unmanaged | to_nice_yaml }}
               Press Enter to continue, or Ctrl+C and then 'A' to abort.
-        - community.general.homebrew:
+        - name: Remove unmanaged packages
+          community.general.homebrew:
             name: "{{ item }}"
             state: absent
+          ignore_errors: true
           loop: "{{ unmanaged }}"
-      when: unmanaged is defined and unmanaged | length > 0

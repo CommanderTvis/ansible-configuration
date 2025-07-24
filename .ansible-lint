@@ -1,0 +1,8 @@
+---
+skip_list:
+  - ignore-errors
+  - yaml
+  - risky-shell-pipe
+  - command-instead-of-module
+  - no-changed-when
+
