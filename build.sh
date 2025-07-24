@@ -32,4 +32,9 @@ if ! command -v ansible-playbook >/dev/null 2>&1; then
     ansible-galaxy collection install community.general
 fi
 
-ansible-playbook -i 'localhost,' -c local "$PLAYBOOK" --ask-become-pass
+# Run ansible-playbook with OS-specific options
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    ansible-playbook -i 'localhost,' -c local "$PLAYBOOK"
+else
+    ansible-playbook -i 'localhost,' -c local "$PLAYBOOK" --ask-become-pass
+fi
