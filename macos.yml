@@ -37,7 +37,7 @@
       - zulip
       - docker-desktop
       - iterm2
-      - claude
+      - monitorcontrol
   tasks:
     - name: Update Homebrew
       community.general.homebrew: { update_homebrew: true }

@@ -5,4 +5,3 @@ skip_list:
   - risky-shell-pipe
   - command-instead-of-module
   - no-changed-when
-
