@@ -37,6 +37,7 @@
       - zulip
       - docker-desktop
       - iterm2
+      - claude
   tasks:
     - name: Update Homebrew
       community.general.homebrew: { update_homebrew: true }

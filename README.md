@@ -7,9 +7,10 @@ This project contains Ansible playbooks for automating the setup and configurati
 - Adds and configures third-party APT repositories (Brave, VS Code, Docker, 1Password, Tailscale, etc.)
 - Installs Flatpak and selected flatpak apps (Kubuntu)
 - Configures pipx and installs Python tools
-- Sets up global Git configuration
+- Sets up global Git configuration with 1Password SSH signing
 - Enables and starts Syncthing service
 - Removes unnecessary default packages shipped with Kubuntu
+- Prunes unmanaged packages in macOS
 - Upgrades packages
 
 ## Usage
