@@ -17,6 +17,7 @@
       - neofetch
       - gource
       - node
+      - ffmpeg
     homebrew_cask_apps:
       - visual-studio-code
       - brave-browser
