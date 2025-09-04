@@ -16,6 +16,7 @@
       - yt-dlp
       - neofetch
       - gource
+      - node
     homebrew_cask_apps:
       - visual-studio-code
       - brave-browser
