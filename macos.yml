@@ -12,12 +12,12 @@
       - maven
       - postgresql@14
       - curl
-      - pipx
       - yt-dlp
       - neofetch
       - gource
       - node
       - ffmpeg
+      - uv
     homebrew_cask_apps:
       - visual-studio-code
       - brave-browser
@@ -47,9 +47,8 @@
 
     - name: Install Homebrew formula packages
       community.general.homebrew:
-        name: "{{ item }}"
+        name: "{{ homebrew_packages }}"
         state: latest
-      loop: "{{ homebrew_packages }}"
 
     - name: Install Homebrew cask applications
       community.general.homebrew_cask:
@@ -57,21 +56,11 @@
         state: latest
         accept_external_apps: true
 
-    - name: Configure pipx for user
-      ansible.builtin.command: pipx ensurepath
-      register: pipx_ensurepath
-      changed_when: false
-
-    - name: Install pipx packages
-      vars:
-        pipx_packages:
-          - poetry
-          - uv
-      community.general.pipx:
-        executable: /opt/homebrew/bin/pipx
-        name: "{{ item }}"
+    - name: Install yarn globally with npm
+      community.general.npm:
+        name: yarn
+        global: true
         state: latest
-      loop: "{{ pipx_packages }}"
 
     - name: Configure global Git config
       community.general.git_config:
@@ -79,10 +68,10 @@
         scope: global
         value: "{{ item.value }}"
       loop:
-        - { name: init.defaultBranch, value: "master" }
+        - { name: init.defaultBranch, value: master }
         - { name: user.name, value: "Iaroslav Postovalov" }
         - { name: user.email, value: "postovalovya@gmail.com" }
-        - { name: core.autocrlf, value: "input" }
+        - { name: core.autocrlf, value: input }
         - name: user.signingkey
           value: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPhrNPHMWPV7gGuPheIX4POXrlPNNL2h/KMAJsAuSA0W"
         - { name: gpg.format, value: "ssh" }
