@@ -34,7 +34,11 @@ fi
 
 # Run ansible-playbook with OS-specific options
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    ansible-playbook -i 'localhost,' -c local "$PLAYBOOK"
+    echo -n "Enter your password for privilege escalation: "
+    read -s PASSWORD
+    echo  # Add newline after password input
+    ansible-playbook -i 'localhost,' -c local "$PLAYBOOK" -e "ansible_become_password=$PASSWORD"
+    unset PASSWORD  # Clear password from memory for security
 else
     ansible-playbook -i 'localhost,' -c local "$PLAYBOOK" --ask-become-pass
 fi

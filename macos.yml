@@ -55,6 +55,7 @@
         name: "{{ homebrew_cask_apps }}"
         state: latest
         accept_external_apps: true
+        sudo_password: "{{ ansible_become_password }}"
 
     - name: Install yarn globally with npm
       community.general.npm:
