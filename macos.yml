@@ -18,6 +18,7 @@
       - node
       - ffmpeg
       - uv
+      - claude-code
     homebrew_cask_apps:
       - visual-studio-code
       - brave-browser
@@ -41,6 +42,8 @@
       - monitorcontrol
       - warp
       - notion
+      - claude
+      - slack
   tasks:
     - name: Update Homebrew
       community.general.homebrew: { update_homebrew: true }
@@ -109,9 +112,34 @@
               The following unmanaged packages will be pruned:
               {{ unmanaged | to_nice_yaml }}
               Press Enter to continue, or Ctrl+C and then 'A' to abort.
-        - name: Remove unmanaged packages
-          community.general.homebrew:
-            name: "{{ item }}"
-            state: absent
-          ignore_errors: true
-          loop: "{{ unmanaged }}"
+        
+        - name: Remove packages with dependencies first (packages that depend on other unmanaged packages)
+          ansible.builtin.shell: |
+            for pkg in {{ unmanaged | join(' ') }}; do
+              if brew list --formula | grep -q "^$pkg$"; then
+                # Check if this package has dependents in our unmanaged list
+                dependents=$(brew uses --installed --recursive $pkg 2>/dev/null | grep -E '^({{ unmanaged | join('|') }})$' | wc -l || echo 0)
+                if [ "$dependents" -gt 0 ]; then
+                  echo "Skipping $pkg - has dependents"
+                else
+                  echo "Removing $pkg - no dependents in unmanaged list"
+                  brew uninstall $pkg 2>/dev/null || echo "Failed to remove $pkg"
+                fi
+              elif brew list --cask | grep -q "^$pkg$"; then
+                echo "Removing cask $pkg"
+                brew uninstall --cask $pkg 2>/dev/null || echo "Failed to remove cask $pkg"
+              fi
+            done
+          register: first_pass_removal
+          changed_when: "'Removing' in first_pass_removal.stdout"
+          
+        - name: Remove remaining dependencies with force flag
+          ansible.builtin.shell: |
+            for pkg in {{ unmanaged | join(' ') }}; do
+              if brew list --formula | grep -q "^$pkg$" 2>/dev/null; then
+                echo "Force removing remaining package: $pkg"
+                brew uninstall --ignore-dependencies $pkg 2>/dev/null || echo "Failed to force remove $pkg"
+              fi
+            done
+          register: second_pass_removal
+          changed_when: "'Force removing' in second_pass_removal.stdout"
