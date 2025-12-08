@@ -53,7 +53,7 @@
           - apt-transport-https
           - gpg
           - pipx
-          - nvidia-driver-570
+          - nvidia-driver-580
           - okular
           - kdeconnect
           - fonts-jetbrains-mono
