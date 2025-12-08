@@ -1,6 +1,6 @@
-# Automated Configuration for macOS & Kubuntu 25.04
+# Automated Configuration for macOS & Kubuntu 25.10
 
-This project contains Ansible playbooks for automating the setup and configuration of my personal computers running either macOS or Kubuntu 25.04.
+This project contains Ansible playbooks for automating the setup and configuration of my personal computers running either macOS or Kubuntu 25.10.
 
 ## Features
 
@@ -34,5 +34,5 @@ Run the provided `build.sh` script to apply the configuration for your system:
 You will be prompted for your sudo password during execution.
 
 ## Requirements
-- macOS or Kubuntu 25.04
+- macOS or Kubuntu 25.10
 - Internet connection

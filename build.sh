@@ -6,8 +6,8 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     PLAYBOOK="macos.yml"
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
     # Check Ubuntu version
-    if ! grep -q "Ubuntu 25.04" /etc/os-release; then
-        echo "Error: Only Ubuntu 25.04 is supported on Linux"
+    if ! grep -q "Ubuntu 25.10" /etc/os-release; then
+        echo "Error: Only Ubuntu 25.10 is supported on Linux"
         exit 1
     fi
     # Check for Kubuntu
@@ -38,7 +38,8 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     read -s PASSWORD
     echo  # Add newline after password input
     ansible-playbook -i 'localhost,' -c local "$PLAYBOOK" -e "ansible_become_password=$PASSWORD"
-    unset PASSWORD  # Clear password from memory for security
+    unset PASSWORD
 else
-    ansible-playbook -i 'localhost,' -c local "$PLAYBOOK" --ask-become-pass
+    # Use local connection with passwordless sudo
+    ansible-playbook -i 'localhost,' -c local "$PLAYBOOK"
 fi

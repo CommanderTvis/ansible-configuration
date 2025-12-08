@@ -1,5 +1,5 @@
 ---
-- name: Ansible for Kubuntu 25.04
+- name: Ansible for Kubuntu 25.10
   hosts: all
   become: true
   vars:
@@ -33,7 +33,7 @@
           - wget
           - tree
           - yakuake
-          - neofetch
+          - fastfetch
           - vlc
           - ca-certificates
           - curl
@@ -55,6 +55,7 @@
           - pipx
           - nvidia-driver-570
           - okular
+          - kdeconnect
           - fonts-jetbrains-mono
         state: present
 
@@ -82,131 +83,140 @@
           - org.zulip.Zulip
         state: latest
 
-    - name: Install Tailscale if not installed
-      when: "'tailscale' not in ansible_facts.packages"
-      block:
-        - name: Download Tailscale GPG key
-          ansible.builtin.shell: >
-            curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/plucky.noarmor.gpg > /usr/share/keyrings/tailscale-archive-keyring.gpg
-          args: { creates: /usr/share/keyrings/tailscale-archive-keyring.gpg }
+    - name: Download Tailscale GPG key
+      ansible.builtin.shell: >
+        curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/plucky.noarmor.gpg > /usr/share/keyrings/tailscale-archive-keyring.gpg
+      args: { creates: /usr/share/keyrings/tailscale-archive-keyring.gpg }
 
-        - name: Add Tailscale repository
-          ansible.builtin.shell: >
-            curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/plucky.tailscale-keyring.list > /etc/apt/sources.list.d/tailscale.list
-          args: { creates: /etc/apt/sources.list.d/tailscale.list }
+    - name: Add Tailscale repository
+      ansible.builtin.shell: >
+        curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/plucky.tailscale-keyring.list > /etc/apt/sources.list.d/tailscale.list
+      args: { creates: /etc/apt/sources.list.d/tailscale.list }
 
-        - name: Install Tailscale
-          ansible.builtin.apt:
-            update_cache: true
-            name: tailscale
-            state: present
+    - name: Install Tailscale
+      ansible.builtin.apt:
+        update_cache: true
+        name: tailscale
+        state: present
 
-    - name: Install Brave if not installed
-      when: "'brave-browser' not in ansible_facts.packages"
-      block:
-        - name: Get Brave GPG key
-          ansible.builtin.shell: >
-            curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg
-            https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
+    - name: Get Brave GPG key
+      ansible.builtin.shell: >
+        curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg
+        https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg
+      args: { creates: /usr/share/keyrings/brave-browser-archive-keyring.gpg }
 
-        - name: Add Brave browser release sources
-          ansible.builtin.shell: >
-            curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources
-            https://brave-browser-apt-release.s3.brave.com/brave-browser.sources
+    - name: Add Brave browser release sources
+      ansible.builtin.shell: >
+        curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources
+        https://brave-browser-apt-release.s3.brave.com/brave-browser.sources
+      args: { creates: /etc/apt/sources.list.d/brave-browser-release.sources }
 
-        - name: Install Brave browser
-          ansible.builtin.apt:
-            update_cache: true
-            name: brave-browser
-            state: present
+    - name: Install Brave browser
+      ansible.builtin.apt:
+        update_cache: true
+        name: brave-browser
+        state: present
 
-    - name: Install VS Code if not installed
-      when: "'code' not in ansible_facts.packages"
-      block:
-        - name: Download Microsoft GPG key
-          ansible.builtin.shell: >
-            wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /tmp/packages.microsoft.gpg
-          args: { creates: /tmp/packages.microsoft.gpg }
+    - name: Download Microsoft GPG key
+      ansible.builtin.shell: >
+        wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /tmp/packages.microsoft.gpg
+      args: { creates: /tmp/packages.microsoft.gpg }
 
-        - name: Install Microsoft GPG key
-          ansible.builtin.shell: >
-            install -D -o root -g root -m 644 /tmp/packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg
-          args: { creates: /etc/apt/keyrings/packages.microsoft.gpg }
+    - name: Install Microsoft GPG key
+      ansible.builtin.shell: >
+        install -D -o root -g root -m 644 /tmp/packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg
+      args: { creates: /etc/apt/keyrings/packages.microsoft.gpg }
 
-        - name: Add VS Code repository
-          ansible.builtin.shell: >
-            echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" > /etc/apt/sources.list.d/vscode.list
+    - name: Add VS Code repository
+      ansible.builtin.shell: >
+        echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" > /etc/apt/sources.list.d/vscode.list
+      args: { creates: /etc/apt/sources.list.d/vscode.list }
 
-        - name: Install VS Code
-          ansible.builtin.apt:
-            update_cache: true
-            name: code
-            state: present
+    - name: Install VS Code
+      ansible.builtin.apt:
+        update_cache: true
+        name: code
+        state: present
 
-    - name: Install 1Password if not installed
-      when: "'1password' not in ansible_facts.packages"
-      block:
-        - name: Download 1Password GPG key for APT
-          ansible.builtin.shell: >
-            curl -sS https://downloads.1password.com/linux/keys/1password.asc |
-            gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
-          args: { creates: /usr/share/keyrings/1password-archive-keyring.gpg }
+    - name: Download 1Password GPG key for APT
+      ansible.builtin.shell: >
+        curl -sS https://downloads.1password.com/linux/keys/1password.asc |
+        gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
+      args: { creates: /usr/share/keyrings/1password-archive-keyring.gpg }
 
-        - name: Add 1Password repository
-          ansible.builtin.shell: >
-            echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/amd64 stable main' > /etc/apt/sources.list.d/1password.list
-          args: { creates: /etc/apt/sources.list.d/1password.list }
+    - name: Add 1Password repository
+      ansible.builtin.shell: >
+        echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/amd64 stable main' > /etc/apt/sources.list.d/1password.list
+      args: { creates: /etc/apt/sources.list.d/1password.list }
 
-        - name: Setup 1Password debsig verification
-          ansible.builtin.shell: |
-            mkdir -p /etc/debsig/policies/AC2D62742012EA22/
-            curl -sS https://downloads.1password.com/linux/debian/debsig/1password.pol > /etc/debsig/policies/AC2D62742012EA22/1password.pol
-            mkdir -p /usr/share/debsig/keyrings/AC2D62742012EA22
-            curl -sS https://downloads.1password.com/linux/keys/1password.asc | gpg --dearmor --output /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg
-          args: { creates: /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg }
+    - name: Setup 1Password debsig verification
+      ansible.builtin.shell: |
+        mkdir -p /etc/debsig/policies/AC2D62742012EA22/
+        curl -sS https://downloads.1password.com/linux/debian/debsig/1password.pol > /etc/debsig/policies/AC2D62742012EA22/1password.pol
+        mkdir -p /usr/share/debsig/keyrings/AC2D62742012EA22
+        curl -sS https://downloads.1password.com/linux/keys/1password.asc | gpg --dearmor --output /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg
+      args: { creates: /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg }
 
-        - name: Install 1Password
-          ansible.builtin.apt:
-            update_cache: true
-            name:
-              - 1password
-              - 1password-cli
-            state: present
+    - name: Install 1Password
+      ansible.builtin.apt:
+        update_cache: true
+        name:
+          - 1password
+          - 1password-cli
+        state: present
 
-    - name: Install Docker if not installed
-      when: "'docker-ce' not in ansible_facts.packages"
-      block:
-        - name: Create Docker keyring directory
-          ansible.builtin.file:
-            path: /etc/apt/keyrings
-            state: directory
-            mode: '0755'
+    - name: Create Docker keyring directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
 
-        - name: Download Docker GPG key
-          ansible.builtin.shell: >
-            curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-          args: { creates: /etc/apt/keyrings/docker.asc }
+    - name: Download Docker GPG key
+      ansible.builtin.shell: >
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+      args: { creates: /etc/apt/keyrings/docker.asc }
 
-        - name: Set Docker GPG key permissions
-          ansible.builtin.file:
-            path: /etc/apt/keyrings/docker.asc
-            mode: '0644'
+    - name: Set Docker GPG key permissions
+      ansible.builtin.file:
+        path: /etc/apt/keyrings/docker.asc
+        mode: '0644'
 
-        - name: Add Docker repository
-          ansible.builtin.shell: >
-            echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" > /etc/apt/sources.list.d/docker.list
-          args: { creates: /etc/apt/sources.list.d/docker.list }
+    - name: Add Docker repository
+      ansible.builtin.shell: >
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" > /etc/apt/sources.list.d/docker.list
+      args: { creates: /etc/apt/sources.list.d/docker.list }
 
-        - name: Install Docker packages
-          ansible.builtin.apt:
-            update_cache: true
-            name:
-              - docker-ce
-              - docker-ce-cli
-              - containerd.io
-              - docker-buildx-plugin
-              - docker-compose-plugin
-            state: present
+    - name: Install Docker packages
+      ansible.builtin.apt:
+        update_cache: true
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+
+    - name: Download Warp GPG key
+      ansible.builtin.shell: >
+        wget -qO- https://releases.warp.dev/linux/keys/warp.asc | gpg --dearmor > /tmp/warpdotdev.gpg
+      args: { creates: /tmp/warpdotdev.gpg }
+
+    - name: Install Warp GPG key
+      ansible.builtin.shell: >
+        install -D -o root -g root -m 644 /tmp/warpdotdev.gpg /etc/apt/keyrings/warpdotdev.gpg
+      args: { creates: /etc/apt/keyrings/warpdotdev.gpg }
+
+    - name: Add Warp repository
+      ansible.builtin.shell: >
+        echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/warpdotdev.gpg] https://releases.warp.dev/linux/deb stable main" > /etc/apt/sources.list.d/warpdotdev.list
+      args: { creates: /etc/apt/sources.list.d/warpdotdev.list }
+
+    - name: Install Warp Terminal
+      ansible.builtin.apt:
+        update_cache: true
+        name: warp-terminal
+        state: present
 
     - name: Upgrade APT packages
       ansible.builtin.apt: { upgrade: full }
