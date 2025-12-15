@@ -10,10 +10,9 @@ elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
         echo "Error: Only Ubuntu 25.10 is supported on Linux"
         exit 1
     fi
-    # Check for Kubuntu
-    if ! apt list --installed 2>/dev/null | grep -q kubuntu-desktop; then
-        echo "Error: Kubuntu desktop environment required"
-        exit 1
+    # Warn if Kubuntu is not installed (playbook will install it)
+    if ! dpkg -l kubuntu-desktop 2>/dev/null | grep -q '^ii'; then
+        echo "Warning: kubuntu-desktop not installed. The playbook will install it."
     fi
     PLAYBOOK="kubuntu.yml"
 else

@@ -4,85 +4,175 @@
   become: true
   vars:
     ansible_python_interpreter: /usr/bin/python3.13
+    managed_apt_packages:
+      # System essentials
+      - ansible
+      - ansible-lint
+      - init
+      - bash
+      - linux-generic
+      - ubuntu-minimal
+      - ubuntu-standard
+      - kubuntu-desktop
+      # Localization
+      - language-pack-en-base
+      - language-pack-en
+      # CLI tools
+      - wget
+      - tree
+      - fastfetch
+      - ca-certificates
+      - curl
+      - git
+      - yt-dlp
+      - gpg
+      - pipx
+      - openssh-server
+      # Development
+      - maven
+      - postgresql-client-17
+      - software-properties-common
+      - apt-transport-https
+      # Desktop applications
+      - yakuake
+      - vlc
+      - mpv
+      - gource
+      - syncthing
+      - qdirstat
+      - gimp
+      - okular
+      - kdeconnect
+      # Flatpak support
+      - flatpak
+      - plasma-discover-backend-flatpak
+      - kde-config-flatpak
+      # Drivers and fonts
+      - nvidia-driver-580
+      - fonts-jetbrains-mono
+      - qml-module-org-kde-notifications
+      # Third-party repositories
+      - tailscale
+      - brave-browser
+      - code
+      - 1password
+      - 1password-cli
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+      - warp-terminal
+    managed_flatpaks:
+      - md.obsidian.Obsidian
+      - org.getoutline.OutlineManager
+      - com.system76.Popsicle
+      - net.ankiweb.Anki
+      - org.zulip.Zulip
+    # APT packages that should NOT be removed (essential system packages)
+    protected_apt_packages:
+      # Package management and system foundations
+      - apt
+      - dpkg
+      - base-files
+      - base-passwd
+      - debconf
+      - adduser
+      # Init system and boot
+      - systemd
+      - systemd-sysv
+      - init
+      - initramfs-tools
+      - plymouth
+      # Shells and core utilities
+      - bash
+      - dash
+      - coreutils
+      - util-linux
+      - perl-base
+      # User authentication and security
+      - login
+      - passwd
+      - sudo
+      - keyutils
+      # Core system libraries
+      - libc6
+      - libstdc++6
+      - libaio1t64
+      # Ubuntu/Kubuntu metapackages
+      - ubuntu-minimal
+      - ubuntu-standard
+      - kubuntu-desktop
+      # Linux kernel
+      - linux-generic
+      - linux-image-generic
+      - linux-headers-generic
+      # BIOS/Legacy bootloader
+      - grub-common
+      - grub-pc
+      - grub-pc-bin
+      - grub2-common
+      # EFI/UEFI bootloader
+      - efibootmgr
+      - grub-efi-amd64-signed
+      - grub-efi-amd64-bin
+      - grub-efi-amd64-unsigned
+      - grub-gfxpayload-lists
+      - shim-signed
+      - mokutil
+      # Disk and filesystem management
+      - mount
+      - fdisk
+      - btrfs-progs
+      - xfsprogs
+      # LVM and device mapper
+      - lvm2
+      - liblvm2cmd2.03
+      - dmeventd
+      - libdevmapper-event1.02.1
+      - thin-provisioning-tools
+      # Hardware management
+      - udev
+      # System communication and networking
+      - dbus
+      - networkmanager
+      - network-manager
+      # Display server and login manager
+      - sddm
+      - xorg
+      - xserver-xorg
+      - wayland
+      # KDE/Plasma desktop components
+      - baloo-kf5
+      - libappstreamqt5-3
+      - kde-config-fcitx5
+      # Password quality and security libraries
+      - libpwquality1
+      - libpwquality-common
+      - libcrack2
+      - cracklib-runtime
+      # Miscellaneous libraries and utilities
+      - libyaml-cpp0.8
+      - libwebkit2gtk-4.1-0
   tasks:
     - name: Gathering Package Facts
       ansible.builtin.package_facts: { manager: apt }
 
-    # TODO remove all packages except the base system and that are managed by this playbook
-
+    # =========================================================================
+    # REPOSITORY CONFIGURATION
+    # =========================================================================
     - name: Enable the Ubuntu restricted repository
       ansible.builtin.apt_repository:
         repo: "deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }} restricted"
         state: present
 
-    - name: Install standard APT packages
-      ansible.builtin.apt:
-        update_cache: true
-        cache_valid_time: 3600
-        name:
-          - ansible
-          - ansible-lint
-          - init
-          - bash
-          - linux-generic
-          - ubuntu-minimal
-          - ubuntu-standard
-          - kubuntu-desktop
-          - language-pack-en-base
-          - language-pack-en
-          - wget
-          - tree
-          - yakuake
-          - fastfetch
-          - vlc
-          - ca-certificates
-          - curl
-          - gource
-          - git
-          - syncthing
-          - qdirstat
-          - gimp
-          - flatpak
-          - plasma-discover-backend-flatpak
-          - kde-config-flatpak
-          - yt-dlp
-          - mpv
-          - maven
-          - postgresql-client-17
-          - software-properties-common
-          - apt-transport-https
-          - gpg
-          - pipx
-          - nvidia-driver-580
-          - okular
-          - kdeconnect
-          - fonts-jetbrains-mono
-        state: present
+    - name: Create APT keyrings directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
 
-    - name: Remove unnecessary default packages
-      ansible.builtin.apt:
-        name: [ kate ]
-        state: absent
-        autoremove: true
-        purge: true
-
-    - name: Add the flathub flatpak repository remote
-      community.general.flatpak_remote:
-        name: flathub
-        state: present
-        flatpakrepo_url: https://dl.flathub.org/repo/flathub.flatpakrepo
-
-    - name: Install flatpaks
-      community.general.flatpak:
-        name:
-          - md.obsidian.Obsidian
-          - org.getoutline.OutlineManager
-          - com.system76.Popsicle
-          - org.telegram.desktop
-          - net.ankiweb.Anki
-          - org.zulip.Zulip
-        state: latest
-
+    # Tailscale
     - name: Download Tailscale GPG key
       ansible.builtin.shell: >
         curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/plucky.noarmor.gpg > /usr/share/keyrings/tailscale-archive-keyring.gpg
@@ -93,12 +183,7 @@
         curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/plucky.tailscale-keyring.list > /etc/apt/sources.list.d/tailscale.list
       args: { creates: /etc/apt/sources.list.d/tailscale.list }
 
-    - name: Install Tailscale
-      ansible.builtin.apt:
-        update_cache: true
-        name: tailscale
-        state: present
-
+    # Brave Browser
     - name: Get Brave GPG key
       ansible.builtin.shell: >
         curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg
@@ -111,12 +196,7 @@
         https://brave-browser-apt-release.s3.brave.com/brave-browser.sources
       args: { creates: /etc/apt/sources.list.d/brave-browser-release.sources }
 
-    - name: Install Brave browser
-      ansible.builtin.apt:
-        update_cache: true
-        name: brave-browser
-        state: present
-
+    # VS Code (Microsoft)
     - name: Download Microsoft GPG key
       ansible.builtin.shell: >
         wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /tmp/packages.microsoft.gpg
@@ -132,12 +212,7 @@
         echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" > /etc/apt/sources.list.d/vscode.list
       args: { creates: /etc/apt/sources.list.d/vscode.list }
 
-    - name: Install VS Code
-      ansible.builtin.apt:
-        update_cache: true
-        name: code
-        state: present
-
+    # 1Password
     - name: Download 1Password GPG key for APT
       ansible.builtin.shell: >
         curl -sS https://downloads.1password.com/linux/keys/1password.asc |
@@ -157,20 +232,7 @@
         curl -sS https://downloads.1password.com/linux/keys/1password.asc | gpg --dearmor --output /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg
       args: { creates: /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg }
 
-    - name: Install 1Password
-      ansible.builtin.apt:
-        update_cache: true
-        name:
-          - 1password
-          - 1password-cli
-        state: present
-
-    - name: Create Docker keyring directory
-      ansible.builtin.file:
-        path: /etc/apt/keyrings
-        state: directory
-        mode: '0755'
-
+    # Docker
     - name: Download Docker GPG key
       ansible.builtin.shell: >
         curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
@@ -186,17 +248,7 @@
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" > /etc/apt/sources.list.d/docker.list
       args: { creates: /etc/apt/sources.list.d/docker.list }
 
-    - name: Install Docker packages
-      ansible.builtin.apt:
-        update_cache: true
-        name:
-          - docker-ce
-          - docker-ce-cli
-          - containerd.io
-          - docker-buildx-plugin
-          - docker-compose-plugin
-        state: present
-
+    # Warp Terminal
     - name: Download Warp GPG key
       ansible.builtin.shell: >
         wget -qO- https://releases.warp.dev/linux/keys/warp.asc | gpg --dearmor > /tmp/warpdotdev.gpg
@@ -212,14 +264,31 @@
         echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/warpdotdev.gpg] https://releases.warp.dev/linux/deb stable main" > /etc/apt/sources.list.d/warpdotdev.list
       args: { creates: /etc/apt/sources.list.d/warpdotdev.list }
 
-    - name: Install Warp Terminal
+    # =========================================================================
+    # APT PACKAGE INSTALLATION (single step after all repos configured)
+    # =========================================================================
+    - name: Install all managed APT packages
       ansible.builtin.apt:
         update_cache: true
-        name: warp-terminal
+        name: "{{ managed_apt_packages }}"
         state: present
 
     - name: Upgrade APT packages
       ansible.builtin.apt: { upgrade: full }
+
+    # =========================================================================
+    # FLATPAK INSTALLATION
+    # =========================================================================
+    - name: Add the flathub flatpak repository remote
+      community.general.flatpak_remote:
+        name: flathub
+        state: present
+        flatpakrepo_url: https://dl.flathub.org/repo/flathub.flatpakrepo
+
+    - name: Install flatpaks
+      community.general.flatpak:
+        name: "{{ managed_flatpaks }}"
+        state: latest
 
     - name: Configure pipx for user
       become: false
@@ -264,3 +333,92 @@
         - { name: gpg.ssh.program, value: "/opt/1Password/op-ssh-sign" }
         - { name: commit.gpgsign, value: "true" }
       failed_when: "'/opt/1Password/op-ssh-sign' is not file"
+
+    # =========================================================================
+    # CLEANUP: Remove unmanaged Flatpak applications
+    # =========================================================================
+    - name: Gather installed Flatpak applications
+      ansible.builtin.command: flatpak list --app --columns=application
+      register: installed_flatpaks_raw
+      changed_when: false
+      failed_when: false
+
+    - name: Prune unmanaged Flatpak applications
+      vars:
+        installed_flatpaks: "{{ installed_flatpaks_raw.stdout_lines | default([]) }}"
+        unmanaged_flatpaks: "{{ installed_flatpaks | difference(managed_flatpaks) }}"
+      when: unmanaged_flatpaks | length > 0
+      block:
+        - name: Confirm Flatpak pruning
+          ansible.builtin.pause:
+            prompt: |
+              The following unmanaged Flatpak applications will be removed:
+              {{ unmanaged_flatpaks | to_nice_yaml }}
+              Press Enter to continue, or Ctrl+C and then 'A' to abort.
+
+        - name: Remove unmanaged Flatpak applications
+          community.general.flatpak:
+            name: "{{ item }}"
+            state: absent
+          loop: "{{ unmanaged_flatpaks }}"
+
+    # =========================================================================
+    # CLEANUP: Remove unmanaged APT packages
+    # =========================================================================
+    - name: Gather APT package information
+      block:
+        - name: Get manually installed packages (not auto-installed as dependencies)
+          ansible.builtin.shell: |
+            apt-mark showmanual | sort
+          register: manually_installed_raw
+          changed_when: false
+
+        - name: Get all dependencies of managed packages
+          ansible.builtin.shell: |
+            apt-cache depends --recurse --no-recommends --no-suggests \
+              --no-conflicts --no-breaks --no-replaces --no-enhances \
+              {{ managed_apt_packages | join(' ') }} 2>/dev/null | \
+              grep -E '^\w' | sort -u || true
+          register: managed_deps_raw
+          changed_when: false
+          failed_when: false
+
+        - name: Get all essential and required packages
+          ansible.builtin.shell: |
+            dpkg-query -W -f='${Package} ${Essential} ${Priority}\n' | \
+              awk '($2 == "yes" || $3 == "required" || $3 == "important") {print $1}' | sort -u
+          register: essential_packages_raw
+          changed_when: false
+
+    - name: Compute and prune unmanaged APT packages
+      vars:
+        manually_installed: "{{ manually_installed_raw.stdout_lines | default([]) }}"
+        managed_deps: "{{ managed_deps_raw.stdout_lines | default([]) }}"
+        essential_packages: "{{ essential_packages_raw.stdout_lines | default([]) }}"
+        all_protected: "{{ (protected_apt_packages + managed_apt_packages + managed_deps + essential_packages) | unique }}"
+        unmanaged_apt: "{{ manually_installed | difference(all_protected) }}"
+      when: unmanaged_apt | length > 0
+      block:
+        - name: Confirm APT package pruning
+          ansible.builtin.pause:
+            prompt: |
+              ⚠️  WARNING: You are about to remove APT packages.
+
+              The following {{ unmanaged_apt | length }} unmanaged APT packages will be purged:
+              {{ unmanaged_apt | to_nice_yaml }}
+
+              Press Enter to continue, or Ctrl+C and then 'A' to abort.
+
+        # APT handles dependency ordering automatically when given the full list.
+        - name: Purge unmanaged APT packages with autoremove
+          ansible.builtin.apt:
+            name: "{{ unmanaged_apt }}"
+            state: absent
+            purge: true
+            autoremove: true
+          register: apt_purge_result
+
+        - name: Run additional autoremove to clean orphaned dependencies
+          ansible.builtin.apt:
+            autoremove: true
+            purge: true
