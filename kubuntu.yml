@@ -34,7 +34,6 @@
       - software-properties-common
       - apt-transport-https
       # Desktop applications
-      - yakuake
       - vlc
       - mpv
       - gource
@@ -404,7 +403,7 @@
             prompt: |
               ⚠️  WARNING: You are about to remove APT packages.
 
-              The following {{ unmanaged_apt | length }} unmanaged APT packages will be purged:
+              The following will be purged:
               {{ unmanaged_apt | to_nice_yaml }}
 
               Press Enter to continue, or Ctrl+C and then 'A' to abort.
