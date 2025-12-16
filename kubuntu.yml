@@ -24,7 +24,6 @@
       - ca-certificates
       - curl
       - git
-      - yt-dlp
       - gpg
       - pipx
       - openssh-server
@@ -68,6 +67,7 @@
       - com.system76.Popsicle
       - net.ankiweb.Anki
       - org.zulip.Zulip
+      - org.telegram.desktop
     # APT packages that should NOT be removed (essential system packages)
     protected_apt_packages:
       # Package management and system foundations
@@ -286,8 +286,9 @@
 
     - name: Install flatpaks
       community.general.flatpak:
-        name: "{{ managed_flatpaks }}"
-        state: latest
+        name: "{{ item }}"
+        state: present
+      loop: "{{ managed_flatpaks }}"
 
     - name: Configure pipx for user
       become: false
@@ -302,6 +303,7 @@
         pipx_packages:
           - poetry
           - uv
+          - yt-dlp
       community.general.pipx:
         name: "{{ item }}"
         state: latest
