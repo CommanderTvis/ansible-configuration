@@ -63,11 +63,9 @@
       - warp-terminal
     managed_flatpaks:
       - md.obsidian.Obsidian
-      - org.getoutline.OutlineManager
       - com.system76.Popsicle
       - net.ankiweb.Anki
       - org.zulip.Zulip
-      - org.telegram.desktop
     # APT packages that should NOT be removed (essential system packages)
     protected_apt_packages:
       # Package management and system foundations
