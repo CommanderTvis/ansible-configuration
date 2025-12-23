@@ -160,7 +160,7 @@
     # =========================================================================
     - name: Enable the Ubuntu restricted repository
       ansible.builtin.apt_repository:
-        repo: "deb http://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }} restricted"
+        repo: "deb https://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }} restricted"
         state: present
 
     - name: Create APT keyrings directory
