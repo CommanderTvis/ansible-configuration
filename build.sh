@@ -36,9 +36,9 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     echo -n "Enter your password for privilege escalation: "
     read -s PASSWORD
     echo  # Add newline after password input
-    ansible-playbook -i 'localhost,' -c local "$PLAYBOOK" -e "ansible_become_password=$PASSWORD"
+    ansible-playbook -i 'localhost,'  -c local "$PLAYBOOK" -e "ansible_become_password=$PASSWORD"
     unset PASSWORD
 else
     # Use local connection with passwordless sudo
-    ansible-playbook -i 'localhost,' -c local "$PLAYBOOK"
+    ANSIBLE_CONFIG=kubuntu.cfg ansible-playbook -i 'localhost,' -c local "$PLAYBOOK"
 fi

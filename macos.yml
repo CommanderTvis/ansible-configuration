@@ -2,7 +2,6 @@
 - name: Ansible for macOS with Homebrew
   hosts: all
   vars:
-    ansible_python_interpreter: /opt/homebrew/bin/python3.13
     homebrew_packages:
       - ansible
       - ansible-lint
@@ -13,12 +12,11 @@
       - postgresql@14
       - curl
       - yt-dlp
-      - neofetch
+      - fastfetch
       - gource
       - node
       - ffmpeg
       - uv
-      - claude-code
     homebrew_cask_apps:
       - visual-studio-code
       - brave-browser
@@ -38,7 +36,6 @@
       - alt-tab
       - zulip
       - docker-desktop
-      - iterm2
       - monitorcontrol
       - warp
       - notion
