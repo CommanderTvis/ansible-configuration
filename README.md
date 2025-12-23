@@ -17,11 +17,11 @@ This project contains Ansible playbooks for automating the setup and configurati
 - Prunes unmanaged Homebrew packages with user confirmation
 
 ### Kubuntu Specific
-- Adds and configures third-party APT repositories (Brave, VS Code, Docker, 1Password, Tailscale)
-- Installs Flatpak and selected flatpak applications (Obsidian, Telegram, Anki, etc.)
-- Configures pipx and installs Python development tools (poetry, uv)
+- Adds and configures third-party APT repositories (Brave, VS Code, Docker, 1Password, Tailscale, Warp)
+- Installs Flatpak and selected flatpak applications (Obsidian, Anki, Zulip, Popsicle)
+- Configures pipx and installs Python development tools (poetry, uv, yt-dlp)
 - Enables and starts Syncthing service for file synchronization
-- Removes unnecessary default packages (kate)
+- Prunes unmanaged Flatpak applications and APT packages with user confirmation
 - Supports NVIDIA driver installation
 
 ## Usage
@@ -36,3 +36,4 @@ You will be prompted for your sudo password during execution.
 ## Requirements
 - macOS or Kubuntu 25.10
 - Internet connection
+- Sudo privileges
