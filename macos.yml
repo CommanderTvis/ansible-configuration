@@ -38,10 +38,10 @@
       - docker-desktop
       - monitorcontrol
       - warp
-      - notion
       - claude
       - slack
       - arc
+      - flux-app
   tasks:
     - name: Update Homebrew
       community.general.homebrew: { update_homebrew: true }
