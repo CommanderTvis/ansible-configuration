@@ -2,6 +2,7 @@
 - name: Ansible for macOS with Homebrew
   hosts: all
   vars:
+    ansible_python_interpreter: auto_silent
     homebrew_packages:
       - ansible
       - ansible-lint
@@ -26,7 +27,6 @@
       - gimp
       - syncthing-app
       - qdirstat
-      - telegram-desktop
       - anki
       - obsidian
       - tailscale-app
@@ -36,7 +36,6 @@
       - alt-tab
       - zulip
       - docker-desktop
-      - monitorcontrol
       - warp
       - claude
       - slack
