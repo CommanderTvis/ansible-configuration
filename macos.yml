@@ -9,15 +9,17 @@
       - wget
       - tree
       - git
-      - maven
       - postgresql@14
       - curl
       - yt-dlp
       - fastfetch
       - gource
       - node
+      - pnpm
       - ffmpeg
       - uv
+    homebrew_protected:
+      - maven
     homebrew_cask_apps:
       - visual-studio-code
       - brave-browser
@@ -41,9 +43,16 @@
       - slack
       - arc
       - flux-app
+      - philips-hue-sync
   tasks:
     - name: Update Homebrew
       community.general.homebrew: { update_homebrew: true }
+
+    - name: Install Maven with ignore-dependencies
+      community.general.homebrew:
+        name: maven
+        state: present
+        install_options: ignore-dependencies
 
     - name: Install Homebrew formula packages
       community.general.homebrew:
@@ -98,7 +107,7 @@
     - name: Prune unmanaged packages
       vars:
         installed: "{{ installed_formulae.stdout_lines + installed_casks.stdout_lines }}"
-        managed: "{{ homebrew_packages + homebrew_cask_apps }}"
+        managed: "{{ homebrew_packages + homebrew_cask_apps + homebrew_protected }}"
         dependencies: "{{ managed_deps.stdout_lines | default([]) }}"
         unmanaged: "{{ installed | difference(managed + dependencies) }}"
       when: unmanaged is defined and unmanaged | length > 0
