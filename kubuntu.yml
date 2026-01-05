@@ -60,7 +60,6 @@
       - containerd.io
       - docker-buildx-plugin
       - docker-compose-plugin
-      - warp-terminal
     managed_flatpaks:
       - md.obsidian.Obsidian
       - com.system76.Popsicle
