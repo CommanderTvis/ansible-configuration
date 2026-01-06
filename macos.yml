@@ -18,8 +18,10 @@
       - pnpm
       - ffmpeg
       - uv
+      - tmux
+      - gemini-cli
     homebrew_protected:
-      - maven
+      - mvnd@1
     homebrew_cask_apps:
       - visual-studio-code
       - brave-browser
@@ -43,15 +45,47 @@
       - arc
       - flux-app
       - philips-hue-sync
+      - claude-code
   tasks:
     - name: Update Homebrew
       community.general.homebrew: { update_homebrew: true }
 
-    - name: Install Maven with ignore-dependencies
+    - name: Tap mvndaemon/homebrew-mvnd
+      community.general.homebrew_tap:
+        name: mvndaemon/homebrew-mvnd
+        state: present
+
+    - name: Get mvnd dependencies
+      ansible.builtin.command: brew deps mvndaemon/mvnd/mvnd@1
+      register: mvnd_deps
+      changed_when: false
+      failed_when: false
+
+    - name: Install mvnd dependencies except openjdk
       community.general.homebrew:
-        name: maven
+        name: "{{ mvnd_deps.stdout_lines | reject('match', '^openjdk(@.*)?$') | list }}"
+        state: present
+      when: mvnd_deps.stdout_lines | length > 0
+
+    - name: Install mvnd with ignore-dependencies for openjdk
+      community.general.homebrew:
+        name: mvndaemon/mvnd/mvnd@1
         state: present
         install_options: ignore-dependencies
+
+    - name: Create symlink for mvnd binary
+      ansible.builtin.file:
+        src: /opt/homebrew/opt/mvnd@1/bin/mvnd
+        dest: /opt/homebrew/bin/mvnd
+        state: link
+        force: true
+
+    - name: Create symlink for mvn to mvnd
+      ansible.builtin.file:
+        src: /opt/homebrew/bin/mvnd
+        dest: /opt/homebrew/bin/mvn
+        state: link
+        force: true
 
     - name: Install Homebrew formula packages
       community.general.homebrew:
@@ -117,7 +151,7 @@
               The following unmanaged packages will be pruned:
               {{ unmanaged | to_nice_yaml }}
               Press Enter to continue, or Ctrl+C and then 'A' to abort.
-        
+
         - name: Remove packages with dependencies first (packages that depend on other unmanaged packages)
           ansible.builtin.shell: |
             for pkg in {{ unmanaged | join(' ') }}; do
@@ -132,11 +166,21 @@
                 fi
               elif brew list --cask | grep -q "^$pkg$"; then
                 echo "Removing cask $pkg"
-                brew uninstall --cask $pkg 2>/dev/null || echo "Failed to remove cask $pkg"
+                /usr/bin/expect <<EOF
+            spawn brew uninstall --cask --force $pkg
+            expect {
+              "Password:" {
+                send "{{ ansible_become_password }}\r"
+                exp_continue
+              }
+              eof
+            }
+            EOF
               fi
             done
           register: first_pass_removal
           changed_when: "'Removing' in first_pass_removal.stdout"
+          no_log: true
           
         - name: Remove remaining dependencies with force flag
           ansible.builtin.shell: |
