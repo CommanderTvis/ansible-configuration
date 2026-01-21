@@ -20,10 +20,10 @@
       - uv
       - tmux
       - gemini-cli
+      - gh
     homebrew_protected:
       - mvnd@1
     homebrew_cask_apps:
-      - visual-studio-code
       - brave-browser
       - 1password
       - 1password-cli
@@ -46,6 +46,8 @@
       - flux-app
       - philips-hue-sync
       - claude-code
+      - zed
+      - codex
   tasks:
     - name: Update Homebrew
       community.general.homebrew: { update_homebrew: true }
@@ -118,7 +120,10 @@
         - name: user.signingkey
           value: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPhrNPHMWPV7gGuPheIX4POXrlPNNL2h/KMAJsAuSA0W"
         - { name: gpg.format, value: "ssh" }
-        - { name: gpg.ssh.program, value: "/Applications/1Password.app/Contents/MacOS/op-ssh-sign" }
+        - {
+            name: gpg.ssh.program,
+            value: "/Applications/1Password.app/Contents/MacOS/op-ssh-sign",
+          }
         - { name: commit.gpgsign, value: "true" }
 
     - name: Gather installed packages and dependencies
@@ -152,7 +157,7 @@
               {{ unmanaged | to_nice_yaml }}
               Press Enter to continue, or Ctrl+C and then 'A' to abort.
 
-        - name: Remove packages with dependencies first (packages that depend on other unmanaged packages)
+        - name: Remove packages with dependencies
           ansible.builtin.shell: |
             for pkg in {{ unmanaged | join(' ') }}; do
               if brew list --formula | grep -q "^$pkg$"; then
@@ -181,7 +186,7 @@
           register: first_pass_removal
           changed_when: "'Removing' in first_pass_removal.stdout"
           no_log: true
-          
+
         - name: Remove remaining dependencies with force flag
           ansible.builtin.shell: |
             for pkg in {{ unmanaged | join(' ') }}; do
