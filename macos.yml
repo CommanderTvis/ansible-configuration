@@ -19,8 +19,7 @@
       - ffmpeg
       - uv
       - tmux
-      - gemini-cli
-      - gh
+      - gh # GitHub CLI
     homebrew_protected:
       - mvnd@1
     homebrew_cask_apps:
@@ -120,10 +119,7 @@
         - name: user.signingkey
           value: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPhrNPHMWPV7gGuPheIX4POXrlPNNL2h/KMAJsAuSA0W"
         - { name: gpg.format, value: "ssh" }
-        - {
-            name: gpg.ssh.program,
-            value: "/Applications/1Password.app/Contents/MacOS/op-ssh-sign",
-          }
+        - { name: gpg.ssh.program, value: "/Applications/1Password.app/Contents/MacOS/op-ssh-sign" }
         - { name: commit.gpgsign, value: "true" }
 
     - name: Gather installed packages and dependencies
@@ -137,7 +133,8 @@
           register: installed_casks
           changed_when: false
         - name: Gather managed dependencies
-          ansible.builtin.command: "brew deps --union --include-build --include-optional {{ homebrew_packages | join(' ') }}"
+          ansible.builtin.command: | 
+            brew deps --union --include-build --include-optional {{ homebrew_packages | join(' ') }}
           register: managed_deps
           changed_when: false
           failed_when: false
