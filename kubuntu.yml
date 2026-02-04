@@ -52,7 +52,6 @@
       # Third-party repositories
       - tailscale
       - brave-browser
-      - code
       - 1password
       - 1password-cli
       - docker-ce
@@ -65,6 +64,7 @@
       - com.system76.Popsicle
       - net.ankiweb.Anki
       - org.zulip.Zulip
+      - dev.zed.Zed
     # APT packages that should NOT be removed (essential system packages)
     protected_apt_packages:
       # Package management and system foundations
@@ -166,7 +166,7 @@
       ansible.builtin.file:
         path: /etc/apt/keyrings
         state: directory
-        mode: '0755'
+        mode: "0755"
 
     # Tailscale
     - name: Download Tailscale GPG key
@@ -191,22 +191,6 @@
         curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources
         https://brave-browser-apt-release.s3.brave.com/brave-browser.sources
       args: { creates: /etc/apt/sources.list.d/brave-browser-release.sources }
-
-    # VS Code (Microsoft)
-    - name: Download Microsoft GPG key
-      ansible.builtin.shell: >
-        wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /tmp/packages.microsoft.gpg
-      args: { creates: /tmp/packages.microsoft.gpg }
-
-    - name: Install Microsoft GPG key
-      ansible.builtin.shell: >
-        install -D -o root -g root -m 644 /tmp/packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg
-      args: { creates: /etc/apt/keyrings/packages.microsoft.gpg }
-
-    - name: Add VS Code repository
-      ansible.builtin.shell: >
-        echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" > /etc/apt/sources.list.d/vscode.list
-      args: { creates: /etc/apt/sources.list.d/vscode.list }
 
     # 1Password
     - name: Download 1Password GPG key for APT
@@ -237,28 +221,12 @@
     - name: Set Docker GPG key permissions
       ansible.builtin.file:
         path: /etc/apt/keyrings/docker.asc
-        mode: '0644'
+        mode: "0644"
 
     - name: Add Docker repository
       ansible.builtin.shell: >
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" > /etc/apt/sources.list.d/docker.list
       args: { creates: /etc/apt/sources.list.d/docker.list }
-
-    # Warp Terminal
-    - name: Download Warp GPG key
-      ansible.builtin.shell: >
-        wget -qO- https://releases.warp.dev/linux/keys/warp.asc | gpg --dearmor > /tmp/warpdotdev.gpg
-      args: { creates: /tmp/warpdotdev.gpg }
-
-    - name: Install Warp GPG key
-      ansible.builtin.shell: >
-        install -D -o root -g root -m 644 /tmp/warpdotdev.gpg /etc/apt/keyrings/warpdotdev.gpg
-      args: { creates: /etc/apt/keyrings/warpdotdev.gpg }
-
-    - name: Add Warp repository
-      ansible.builtin.shell: >
-        echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/warpdotdev.gpg] https://releases.warp.dev/linux/deb stable main" > /etc/apt/sources.list.d/warpdotdev.list
-      args: { creates: /etc/apt/sources.list.d/warpdotdev.list }
 
     # =========================================================================
     # APT PACKAGE INSTALLATION (single step after all repos configured)
