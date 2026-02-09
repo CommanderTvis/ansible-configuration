@@ -18,8 +18,9 @@
       - ffmpeg
       - uv
       - tmux
-      - gh # GitHub CLI
+      - gh # GitHub
       - ripgrep
+      - glab # GitLab
     homebrew_protected:
       - mvnd@1
     homebrew_cask_apps:
@@ -92,6 +93,34 @@
       community.general.homebrew:
         name: "{{ homebrew_packages }}"
         state: latest
+
+    - name: Tap commandertvis/hue-manager (private)
+      community.general.homebrew_tap:
+        name: commandertvis/hue-manager
+        url: git@github.com:CommanderTvis/hue-manager.git
+        state: present
+      register: hue_tap
+      failed_when: false
+
+    - name: Install hue-manager cask
+      community.general.homebrew_cask:
+        name: hue-manager
+        state: latest
+        accept_external_apps: true
+        sudo_password: "{{ ansible_become_password }}"
+      when: hue_tap is succeeded
+      register: hue_install
+      failed_when: false
+
+    - name: Warn if hue-manager tap/install failed
+      ansible.builtin.debug:
+        msg: "hue-manager skipped — tap failed (no SSH access to private repo?)"
+      when: hue_tap is failed
+
+    - name: Warn if hue-manager install failed
+      ansible.builtin.debug:
+        msg: "hue-manager install failed — {{ hue_install.msg | default('unknown error') }}"
+      when: hue_tap is succeeded and hue_install is failed
 
     - name: Install Homebrew cask applications
       community.general.homebrew_cask:
