@@ -22,6 +22,7 @@
       - ripgrep
       - glab # GitLab
       - deno
+      - junie
     homebrew_protected:
       - mvnd@1
       - hue-manager
@@ -49,8 +50,8 @@
       - philips-hue-sync
       - claude-code
       - zed
-      - codex
       - monitorcontrol
+      - whatsapp
   tasks:
     - name: Update Homebrew
       community.general.homebrew: { update_homebrew: true }
@@ -58,6 +59,11 @@
     - name: Tap mvndaemon/homebrew-mvnd
       community.general.homebrew_tap:
         name: mvndaemon/homebrew-mvnd
+        state: present
+
+    - name: Tap jetbrains-junie/junie
+      community.general.homebrew_tap:
+        name: jetbrains-junie/junie
         state: present
 
     - name: Get mvnd dependencies
