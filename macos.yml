@@ -23,6 +23,8 @@
       - glab # GitLab
       - deno
       - junie
+      - sdkman-cli
+    sdkman_dir: /opt/homebrew/opt/sdkman-cli/libexec
     homebrew_protected:
       - mvnd@1
       - hue-manager
@@ -52,6 +54,8 @@
       - zed
       - monitorcontrol
       - whatsapp
+      - microsoft-teams
+      - iterm2
   tasks:
     - name: Update Homebrew
       community.general.homebrew: { update_homebrew: true }
@@ -59,6 +63,11 @@
     - name: Tap mvndaemon/homebrew-mvnd
       community.general.homebrew_tap:
         name: mvndaemon/homebrew-mvnd
+        state: present
+
+    - name: Tap sdkman/tap
+      community.general.homebrew_tap:
+        name: sdkman/tap
         state: present
 
     - name: Tap jetbrains-junie/junie
@@ -103,13 +112,28 @@
         name: "{{ homebrew_packages }}"
         state: latest
 
-    - name: Tap commandertvis/hue-manager (private)
-      community.general.homebrew_tap:
-        name: commandertvis/hue-manager
-        url: git@github.com:CommanderTvis/hue-manager.git
-        state: present
+    - name: Get GitHub API token from gh CLI
+      ansible.builtin.command: gh auth token
+      register: gh_token
+      changed_when: false
+      failed_when: false
+
+    - name: Check if hue-manager tap exists
+      ansible.builtin.stat:
+        path: "{{ ansible_facts['env']['HOME'] }}/Library/Taps/commandertvis/homebrew-hue-manager"
+      register: hue_tap_dir
+
+    - name: Tap commandertvis/hue-manager (private, brew branch)
+      ansible.builtin.command:
+        cmd: brew tap commandertvis/hue-manager git@github.com:CommanderTvis/hue-manager.git --branch brew
+      when: not hue_tap_dir.stat.exists
       register: hue_tap
       failed_when: false
+
+    - name: Set hue_tap succeeded when already tapped
+      ansible.builtin.set_fact:
+        hue_tap: { failed: false }
+      when: hue_tap_dir.stat.exists
 
     - name: Install hue-manager cask
       community.general.homebrew_cask:
@@ -117,6 +141,7 @@
         state: latest
         accept_external_apps: true
         sudo_password: "{{ ansible_become_password }}"
+      environment: "{{ {'HOMEBREW_GITHUB_API_TOKEN': gh_token.stdout} if gh_token.rc == 0 else {} }}"
       when: hue_tap is succeeded
       register: hue_install
       failed_when: false
@@ -138,11 +163,63 @@
         accept_external_apps: true
         sudo_password: "{{ ansible_become_password }}"
 
+    - name: Create iTerm2 Dynamic Profiles directory
+      ansible.builtin.file:
+        path: "{{ ansible_facts['env']['HOME'] }}/Library/Application Support/iTerm2/DynamicProfiles"
+        state: directory
+        mode: "0755"
+
+    - name: Configure iTerm2 Drop-down profile (Yakuake-style)
+      ansible.builtin.copy:
+        dest: "{{ ansible_facts['env']['HOME'] }}/Library/Application Support/iTerm2/DynamicProfiles/dropdown.json"
+        mode: "0644"
+        content: |
+          {
+            "Profiles": [
+              {
+                "Name": "Drop-down",
+                "Guid": "drop-down-yakuake-style",
+                "Window Type": 2,
+                "Screen": -1,
+                "Width Percentage": 90,
+                "Height Percentage": 40,
+                "Has Hotkey": true,
+                "HotKey Key Code": 111,
+                "HotKey Characters": "\uf70f",
+                "HotKey Characters Ignoring Modifiers": "\uf70f",
+                "HotKey Modifier Flags": 0,
+                "HotKey Window AutoHides": true,
+                "HotKey Window Animates": true,
+                "HotKey Window Floats": true,
+                "HotKey Window Reopens On Activation": true,
+                "HotKey Activated By Modifier": false,
+                "HotKey Modifier Activation": 0,
+                "HotKey Alternate Shortcuts": [],
+                "Transparency": 0.3,
+                "Initial Use Transparency": true,
+                "Blur": true,
+                "Blur Radius": 5.0
+              }
+            ]
+          }
+
     - name: Install yarn globally with npm
       community.general.npm:
         name: yarn
         global: true
         state: latest
+
+    - name: Ensure Syncthing is a login item
+      ansible.builtin.shell: |
+        osascript <<'APPLESCRIPT'
+        tell application "System Events"
+          if not (exists login item "Syncthing") then
+            make login item at end with properties {path:"/Applications/Syncthing.app", hidden:false}
+          end if
+        end tell
+        APPLESCRIPT
+      register: syncthing_login
+      changed_when: "'login item' not in syncthing_login.stdout"
 
     - name: Set DNS to 1.1.1.1 on all network services
       ansible.builtin.shell: |
@@ -170,6 +247,98 @@
             value: "/Applications/1Password.app/Contents/MacOS/op-ssh-sign",
           }
         - { name: commit.gpgsign, value: "true" }
+
+    - name: Write .zprofile
+      ansible.builtin.copy:
+        dest: "{{ ansible_facts['env']['HOME'] }}/.zprofile"
+        mode: "0644"
+        content: |
+          eval "$(/opt/homebrew/bin/brew shellenv)"
+
+          # SDKMAN
+          export SDKMAN_DIR=$(brew --prefix sdkman-cli)/libexec
+          [[ -s "${SDKMAN_DIR}/bin/sdkman-init.sh" ]] && source "${SDKMAN_DIR}/bin/sdkman-init.sh"
+
+          # Added by Toolbox App
+          export PATH="$PATH:/Users/commandertvis/Library/Application Support/JetBrains/Toolbox/scripts"
+
+    - name: Write .zshrc
+      ansible.builtin.copy:
+        dest: "{{ ansible_facts['env']['HOME'] }}/.zshrc"
+        mode: "0644"
+        content: |
+          # Homebrew auth for private taps (uses gh CLI session)
+          export HOMEBREW_GITHUB_API_TOKEN=$(gh auth token)
+
+          # ytmp4 alias - download and convert to MP4 using yt-dlp
+          alias ytmp4='uvx yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4'
+
+          # ytmp3 alias - download and convert to MP3 using yt-dlp
+          alias ytmp3='uvx yt-dlp -f "bestaudio" --extract-audio --audio-format mp3 --audio-quality 0'
+
+    - name: Enable SDKMAN auto-answer for non-interactive use
+      ansible.builtin.lineinfile:
+        path: "{{ sdkman_dir }}/etc/config"
+        regexp: '^sdkman_auto_answer='
+        line: sdkman_auto_answer=true
+
+    - name: Resolve latest Temurin identifiers
+      ansible.builtin.shell: |
+        export SDKMAN_DIR={{ sdkman_dir }}
+        source "${SDKMAN_DIR}/bin/sdkman-init.sh"
+        sdk list java | grep -oE '{{ item }}\.[0-9.]*-tem' | head -1
+      args:
+        executable: /bin/bash
+      register: temurin_ids
+      changed_when: false
+      loop:
+        - "25"
+        - "21"
+
+    - name: Install Temurin versions via SDKMAN
+      ansible.builtin.shell: |
+        export SDKMAN_DIR={{ sdkman_dir }}
+        source "${SDKMAN_DIR}/bin/sdkman-init.sh"
+        if [ ! -d "${SDKMAN_DIR}/candidates/java/{{ item }}" ]; then
+          sdk install java {{ item }}
+          echo "INSTALLED"
+        else
+          echo "ALREADY_PRESENT"
+        fi
+      args:
+        executable: /bin/bash
+      register: sdk_install
+      changed_when: "'INSTALLED' in sdk_install.stdout"
+      loop: "{{ temurin_ids.results | map(attribute='stdout') | list }}"
+
+    - name: Set Temurin 25 as default
+      ansible.builtin.shell: |
+        export SDKMAN_DIR={{ sdkman_dir }}
+        source "${SDKMAN_DIR}/bin/sdkman-init.sh"
+        sdk default java {{ temurin_ids.results[0].stdout }}
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Remove unmanaged Java versions from SDKMAN
+      ansible.builtin.shell: |
+        export SDKMAN_DIR={{ sdkman_dir }}
+        source "${SDKMAN_DIR}/bin/sdkman-init.sh"
+        managed="{{ temurin_ids.results | map(attribute='stdout') | join(' ') }}"
+        removed=0
+        for dir in "${SDKMAN_DIR}/candidates/java"/*/; do
+          ver=$(basename "$dir")
+          if [ "$ver" = "current" ]; then continue; fi
+          if ! echo "$managed" | grep -qw "$ver"; then
+            sdk uninstall java "$ver"
+            removed=1
+          fi
+        done
+        [ "$removed" -eq 1 ] && echo "REMOVED" || echo "CLEAN"
+      args:
+        executable: /bin/bash
+      register: sdk_prune
+      changed_when: "'REMOVED' in sdk_prune.stdout"
 
     - name: Gather installed packages and dependencies
       block:

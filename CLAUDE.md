@@ -37,3 +37,4 @@ ansible-playbook -i 'localhost,' -c local kubuntu.yml --check
 - macOS playbook installs mvnd@1 (Maven Daemon) as a protected package by first installing its dependencies (excluding openjdk), then installing mvnd with `--ignore-dependencies`, and creating symlinks for mvnd and mvn binaries
 - Both playbooks include interactive confirmation prompts before pruning packages
 - CI runs `ansible-lint` (v25) on push/PR to master using GitHub Actions on Ubuntu 24.04
+- macOS build.sh collects the become password manually and passes it two ways: `--become-password-file` feeds the become plugin for `become: true` tasks, and `-e ansible_become_password=` (JSON-escaped) exposes it as a template variable for `homebrew_cask`'s `sudo_password` parameter. `-K` alone does not expose it as a template variable, and `-e` alone does not feed the become plugin on local connections.
