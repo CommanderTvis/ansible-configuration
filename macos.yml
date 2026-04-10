@@ -22,7 +22,9 @@
       - ripgrep
       - glab # GitLab
       - deno
-      - junie
+      - colima
+      - docker
+      - gitlab-runner
       - sdkman-cli
     sdkman_dir: /opt/homebrew/opt/sdkman-cli/libexec
     homebrew_protected:
@@ -30,6 +32,7 @@
       - hue-manager
     homebrew_cask_apps:
       - brave-browser
+      - google-chrome
       - 1password
       - 1password-cli
       - vlc
@@ -44,10 +47,8 @@
       - jetbrains-toolbox
       - alt-tab
       - zulip
-      - docker-desktop
       - claude
       - slack
-      - arc
       - flux-app
       - philips-hue-sync
       - claude-code
@@ -56,7 +57,31 @@
       - whatsapp
       - microsoft-teams
       - iterm2
+      - steam
   tasks:
+    - name: Check if Rosetta is installed
+      ansible.builtin.command: arch -x86_64 /usr/bin/true
+      register: rosetta_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install Rosetta 2
+      ansible.builtin.command: softwareupdate --install-rosetta --agree-to-license
+      when: rosetta_check.rc != 0
+
+    - name: Ensure private Homebrew taps use SSH remotes
+      ansible.builtin.command:
+        cmd: git -C {{ item.path }} remote set-url origin {{ item.ssh_url }}
+      loop:
+        - path: /opt/homebrew/Library/Taps/commandertvis/homebrew-hue-manager
+          ssh_url: git@github.com:CommanderTvis/hue-manager.git
+      loop_control:
+        label: "{{ item.path | basename }}"
+      when: item.path is directory
+      register: tap_url_fix
+      changed_when: tap_url_fix.rc == 0
+      failed_when: false
+
     - name: Update Homebrew
       community.general.homebrew: { update_homebrew: true }
 
@@ -209,6 +234,28 @@
         global: true
         state: latest
 
+    - name: Remove Docker Desktop login item if present
+      ansible.builtin.shell: |
+        osascript <<'APPLESCRIPT'
+        tell application "System Events"
+          if exists login item "Docker" then
+            delete login item "Docker"
+          end if
+        end tell
+        APPLESCRIPT
+      changed_when: false
+      failed_when: false
+
+    - name: Ensure Colima is running
+      ansible.builtin.command: colima status
+      register: colima_status
+      changed_when: false
+      failed_when: false
+
+    - name: Start Colima
+      ansible.builtin.command: colima start --cpu 4 --memory 12 --disk 60
+      when: colima_status.rc != 0
+
     - name: Ensure Syncthing is a login item
       ansible.builtin.shell: |
         osascript <<'APPLESCRIPT'
@@ -221,6 +268,12 @@
       register: syncthing_login
       changed_when: "'login item' not in syncthing_login.stdout"
 
+    - name: Ensure gitlab-runner brew service is started
+      ansible.builtin.command: brew services start gitlab-runner
+      register: gitlab_runner_svc
+      changed_when: "'Successfully started' in gitlab_runner_svc.stdout"
+      failed_when: false
+
     - name: Set DNS to 1.1.1.1 on all network services
       ansible.builtin.shell: |
         networksetup -listallnetworkservices | tail -n +2 | while IFS= read -r svc; do
@@ -228,6 +281,60 @@
         done
       become: true
       changed_when: false
+
+    - name: Ensure ~/.ssh/sockets directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_facts['env']['HOME'] }}/.ssh/sockets"
+        state: directory
+        mode: "0700"
+
+    - name: Configure ~/.ssh/config
+      ansible.builtin.copy:
+        dest: "{{ ansible_facts['env']['HOME'] }}/.ssh/config"
+        mode: "0600"
+        content: |
+          Host *
+          	IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+          Host 168.119.100.24
+              ControlMaster auto
+              ControlPath ~/.ssh/sockets/%r@%h-%p
+              ControlPersist 600
+
+    - name: Configure macOS defaults
+      community.general.osx_defaults:
+        domain: "{{ item.domain }}"
+        key: "{{ item.key }}"
+        type: "{{ item.type }}"
+        value: "{{ item.value }}"
+      loop:
+        # Dock: auto-hide
+        - { domain: com.apple.dock, key: autohide, type: bool, value: true }
+        # Dock: hide recent apps section
+        - { domain: com.apple.dock, key: show-recents, type: bool, value: false }
+        # Finder: hide recent tags in sidebar
+        - { domain: com.apple.finder, key: ShowRecentTags, type: bool, value: false }
+        # Global: disable natural scrolling
+        - { domain: NSGlobalDomain, key: com.apple.swipescrolldirection, type: bool, value: false }
+        # Global: auto-switch between dark and light mode
+        - { domain: NSGlobalDomain, key: AppleInterfaceStyleSwitchesAutomatically, type: bool, value: true }
+        # Global: double-click title bar does not minimize
+        - { domain: NSGlobalDomain, key: AppleMiniaturizeOnDoubleClick, type: bool, value: false }
+        # Global: mouse tracking speed 2.5
+        - { domain: NSGlobalDomain, key: com.apple.mouse.scaling, type: float, value: 2.5 }
+        # Window Manager: disable tiled window margins
+        - { domain: com.apple.WindowManager, key: EnableTiledWindowMargins, type: bool, value: false }
+        # Window Manager: click desktop hides windows
+        - { domain: com.apple.WindowManager, key: HideDesktop, type: bool, value: true }
+        # Menu bar clock: show AM/PM
+        - { domain: com.apple.menuextra.clock, key: ShowAMPM, type: bool, value: false }
+        # Control Center: show Bluetooth in menu bar
+        - { domain: com.apple.controlcenter, key: "NSStatusItem VisibleCC Bluetooth", type: bool, value: true }
+        # Control Center: show Sound in menu bar
+        - { domain: com.apple.controlcenter, key: "NSStatusItem VisibleCC Sound", type: bool, value: true }
+        # Control Center: show Now Playing in menu bar
+        - { domain: com.apple.controlcenter, key: "NSStatusItem VisibleCC NowPlaying", type: bool, value: true }
+        # Input: show input source (keyboard layout) in menu bar
+        - { domain: com.apple.TextInputMenu, key: visible, type: bool, value: true }
 
     - name: Configure global Git config
       community.general.git_config:

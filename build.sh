@@ -28,8 +28,9 @@ if ! command -v ansible-playbook >/dev/null 2>&1; then
         sudo apt update
         sudo apt install -y ansible
     fi
-    ansible-galaxy install -r requirements.yml
 fi
+
+ansible-galaxy collection install -r requirements.yml --upgrade
 
 # Ensure gh is installed and authenticated on macOS (needed for private Homebrew taps)
 if [[ "$OSTYPE" == "darwin"* ]]; then
