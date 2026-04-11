@@ -268,12 +268,6 @@
       register: syncthing_login
       changed_when: "'login item' not in syncthing_login.stdout"
 
-    - name: Ensure gitlab-runner brew service is started
-      ansible.builtin.command: brew services start gitlab-runner
-      register: gitlab_runner_svc
-      changed_when: "'Successfully started' in gitlab_runner_svc.stdout"
-      failed_when: false
-
     - name: Set DNS to 1.1.1.1 on all network services
       ansible.builtin.shell: |
         networksetup -listallnetworkservices | tail -n +2 | while IFS= read -r svc; do
@@ -368,6 +362,10 @@
 
           # Added by Toolbox App
           export PATH="$PATH:/Users/commandertvis/Library/Application Support/JetBrains/Toolbox/scripts"
+
+          # Default editor: Zed (--wait = callers block until the buffer closes)
+          export EDITOR="zed --wait"
+          export VISUAL="zed --wait"
 
     - name: Write .zshrc
       ansible.builtin.copy:
