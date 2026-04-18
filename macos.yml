@@ -20,17 +20,22 @@
       - tmux
       - gh # GitHub
       - ripgrep
+      - pyright
+      - typescript-language-server
+      - llvm # clangd
       - glab # GitLab
       - deno
       - colima
       - docker
       - gitlab-runner
       - sdkman-cli
+      - cocoapods
     sdkman_dir: /opt/homebrew/opt/sdkman-cli/libexec
     homebrew_protected:
       - mvnd@1
       - hue-manager
     homebrew_cask_apps:
+      - telegram-desktop
       - brave-browser
       - google-chrome
       - 1password
@@ -51,7 +56,6 @@
       - slack
       - flux-app
       - philips-hue-sync
-      - claude-code
       - zed
       - monitorcontrol
       - whatsapp
@@ -118,19 +122,17 @@
         state: present
         install_options: ignore-dependencies
 
-    - name: Create symlink for mvnd binary
+    - name: Create mvnd/mvn symlinks
       ansible.builtin.file:
-        src: /opt/homebrew/opt/mvnd@1/bin/mvnd
-        dest: /opt/homebrew/bin/mvnd
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
         state: link
         force: true
-
-    - name: Create symlink for mvn to mvnd
-      ansible.builtin.file:
-        src: /opt/homebrew/bin/mvnd
-        dest: /opt/homebrew/bin/mvn
-        state: link
-        force: true
+      loop:
+        - { src: /opt/homebrew/opt/mvnd@1/bin/mvnd, dest: /opt/homebrew/bin/mvnd }
+        - { src: /opt/homebrew/bin/mvnd, dest: /opt/homebrew/bin/mvn }
+      loop_control:
+        label: "{{ item.dest }}"
 
     - name: Install Homebrew formula packages
       community.general.homebrew:
@@ -234,39 +236,50 @@
         global: true
         state: latest
 
-    - name: Remove Docker Desktop login item if present
+    - name: Install Claude Code CLI
+      ansible.builtin.shell: |
+        if command -v claude >/dev/null 2>&1; then
+          echo "ALREADY_INSTALLED"
+        else
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "INSTALLED"
+        fi
+      register: claude_code_install
+      changed_when: "'INSTALLED' in claude_code_install.stdout"
+
+    - name: Bootstrap Colima VM and ensure it auto-starts via brew services
+      ansible.builtin.shell: |
+        changed=0
+        if [ ! -d "$HOME/.colima/default" ]; then
+          colima start --cpu 4 --memory 12 --disk 60
+          colima stop
+          changed=1
+        fi
+        if ! brew services list | grep -q '^colima.*started'; then
+          colima stop 2>/dev/null || true
+          brew services start colima
+          changed=1
+        fi
+        [ "$changed" -eq 1 ] && echo "CHANGED" || echo "CLEAN"
+      register: colima_setup
+      changed_when: "'CHANGED' in colima_setup.stdout"
+
+    - name: Ensure apps are login items
       ansible.builtin.shell: |
         osascript <<'APPLESCRIPT'
         tell application "System Events"
-          if exists login item "Docker" then
-            delete login item "Docker"
+          if not (exists login item "{{ item.name }}") then
+            make login item at end with properties {path:"{{ item.path }}", hidden:false}
           end if
         end tell
         APPLESCRIPT
-      changed_when: false
-      failed_when: false
-
-    - name: Ensure Colima is running
-      ansible.builtin.command: colima status
-      register: colima_status
-      changed_when: false
-      failed_when: false
-
-    - name: Start Colima
-      ansible.builtin.command: colima start --cpu 4 --memory 12 --disk 60
-      when: colima_status.rc != 0
-
-    - name: Ensure Syncthing is a login item
-      ansible.builtin.shell: |
-        osascript <<'APPLESCRIPT'
-        tell application "System Events"
-          if not (exists login item "Syncthing") then
-            make login item at end with properties {path:"/Applications/Syncthing.app", hidden:false}
-          end if
-        end tell
-        APPLESCRIPT
-      register: syncthing_login
-      changed_when: "'login item' not in syncthing_login.stdout"
+      loop:
+        - { name: Syncthing, path: /Applications/Syncthing.app }
+        - { name: MonitorControl, path: /Applications/MonitorControl.app }
+      loop_control:
+        label: "{{ item.name }}"
+      register: login_items
+      changed_when: "'login item' not in login_items.stdout"
 
     - name: Set DNS to 1.1.1.1 on all network services
       ansible.builtin.shell: |
@@ -363,6 +376,9 @@
           # Added by Toolbox App
           export PATH="$PATH:/Users/commandertvis/Library/Application Support/JetBrains/Toolbox/scripts"
 
+          # Claude Code (native install)
+          export PATH="$HOME/.local/bin:$PATH"
+
           # Default editor: Zed (--wait = callers block until the buffer closes)
           export EDITOR="zed --wait"
           export VISUAL="zed --wait"
@@ -387,63 +403,41 @@
         regexp: '^sdkman_auto_answer='
         line: sdkman_auto_answer=true
 
-    - name: Resolve latest Temurin identifiers
+    - name: Manage Temurin versions via SDKMAN (install, default, prune)
+      vars:
+        temurin_majors: ["25", "21"]
       ansible.builtin.shell: |
         export SDKMAN_DIR={{ sdkman_dir }}
         source "${SDKMAN_DIR}/bin/sdkman-init.sh"
-        sdk list java | grep -oE '{{ item }}\.[0-9.]*-tem' | head -1
-      args:
-        executable: /bin/bash
-      register: temurin_ids
-      changed_when: false
-      loop:
-        - "25"
-        - "21"
-
-    - name: Install Temurin versions via SDKMAN
-      ansible.builtin.shell: |
-        export SDKMAN_DIR={{ sdkman_dir }}
-        source "${SDKMAN_DIR}/bin/sdkman-init.sh"
-        if [ ! -d "${SDKMAN_DIR}/candidates/java/{{ item }}" ]; then
-          sdk install java {{ item }}
-          echo "INSTALLED"
-        else
-          echo "ALREADY_PRESENT"
-        fi
-      args:
-        executable: /bin/bash
-      register: sdk_install
-      changed_when: "'INSTALLED' in sdk_install.stdout"
-      loop: "{{ temurin_ids.results | map(attribute='stdout') | list }}"
-
-    - name: Set Temurin 25 as default
-      ansible.builtin.shell: |
-        export SDKMAN_DIR={{ sdkman_dir }}
-        source "${SDKMAN_DIR}/bin/sdkman-init.sh"
-        sdk default java {{ temurin_ids.results[0].stdout }}
-      args:
-        executable: /bin/bash
-      changed_when: false
-
-    - name: Remove unmanaged Java versions from SDKMAN
-      ansible.builtin.shell: |
-        export SDKMAN_DIR={{ sdkman_dir }}
-        source "${SDKMAN_DIR}/bin/sdkman-init.sh"
-        managed="{{ temurin_ids.results | map(attribute='stdout') | join(' ') }}"
-        removed=0
-        for dir in "${SDKMAN_DIR}/candidates/java"/*/; do
-          ver=$(basename "$dir")
-          if [ "$ver" = "current" ]; then continue; fi
-          if ! echo "$managed" | grep -qw "$ver"; then
-            sdk uninstall java "$ver"
-            removed=1
+        majors=({{ temurin_majors | join(' ') }})
+        managed=()
+        changed=0
+        for major in "${majors[@]}"; do
+          id=$(sdk list java | grep -oE "${major}\.[0-9.]*-tem" | head -1)
+          managed+=("$id")
+          if [ ! -d "${SDKMAN_DIR}/candidates/java/${id}" ]; then
+            sdk install java "$id"
+            changed=1
           fi
         done
-        [ "$removed" -eq 1 ] && echo "REMOVED" || echo "CLEAN"
+        sdk default java "${managed[0]}"
+        for dir in "${SDKMAN_DIR}/candidates/java"/*/; do
+          ver=$(basename "$dir")
+          [ "$ver" = "current" ] && continue
+          keep=0
+          for m in "${managed[@]}"; do
+            [ "$ver" = "$m" ] && keep=1 && break
+          done
+          if [ "$keep" -eq 0 ]; then
+            sdk uninstall java "$ver"
+            changed=1
+          fi
+        done
+        [ "$changed" -eq 1 ] && echo "CHANGED" || echo "CLEAN"
       args:
         executable: /bin/bash
-      register: sdk_prune
-      changed_when: "'REMOVED' in sdk_prune.stdout"
+      register: sdk_manage
+      changed_when: "'CHANGED' in sdk_manage.stdout"
 
     - name: Gather installed packages and dependencies
       block:
