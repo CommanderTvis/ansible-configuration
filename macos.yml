@@ -4,8 +4,6 @@
   vars:
     ansible_python_interpreter: auto_silent
     homebrew_packages:
-      - ansible
-      - ansible-lint
       - wget
       - tree
       - git
@@ -22,6 +20,8 @@
       - ripgrep
       - pyright
       - typescript-language-server
+      - jetbrains/utils/kotlin-lsp
+      - chromia/core/chr
       - llvm # clangd
       - glab # GitLab
       - deno
@@ -31,8 +31,23 @@
       - sdkman-cli
       - cocoapods
     sdkman_dir: /opt/homebrew/opt/sdkman-cli/libexec
+    homebrew_taps:
+      - { name: sdkman/tap }
+      - { name: jetbrains-junie/junie }
+      - { name: jetbrains/utils }
+      - name: chromia/core
+        url: https://gitlab.com/chromaway/core-tools/homebrew-chromia.git
     homebrew_protected:
       - hue-manager
+      # tapped formulae are listed by `brew list` without the tap prefix, so
+      # protect the bare names to keep the pruner from flagging them.
+      - kotlin-lsp
+      - chr
+      # ansible/ansible-lint are upgraded via a shell task at the end, not the
+      # homebrew module — upgrading the running ansible mid-task replaces its
+      # own .pyc files and breaks result deserialization (module_legacy_m2c).
+      - ansible
+      - ansible-lint
     homebrew_cask_apps:
       - claude
       - telegram-desktop
@@ -62,6 +77,7 @@
       - microsoft-teams
       - iterm2
       - steam
+      - visual-studio-code
   tasks:
     - name: Check if Rosetta is installed
       ansible.builtin.command: arch -x86_64 /usr/bin/true
@@ -89,15 +105,14 @@
     - name: Update Homebrew
       community.general.homebrew: { update_homebrew: true }
 
-    - name: Tap sdkman/tap
+    - name: Tap Homebrew repositories
       community.general.homebrew_tap:
-        name: sdkman/tap
+        name: "{{ item.name }}"
+        url: "{{ item.url | default(omit) }}"
         state: present
-
-    - name: Tap jetbrains-junie/junie
-      community.general.homebrew_tap:
-        name: jetbrains-junie/junie
-        state: present
+      loop: "{{ homebrew_taps }}"
+      loop_control:
+        label: "{{ item.name }}"
 
     - name: Install Homebrew formula packages
       community.general.homebrew:
@@ -476,3 +491,16 @@
             done
           register: second_pass_removal
           changed_when: "'Force removing' in second_pass_removal.stdout"
+
+    # Must be the last task: upgrading ansible/ansible-lint via the homebrew
+    # module replaces the running ansible's own files mid-run and breaks
+    # result deserialization. Doing it via a final shell task is safe because
+    # nothing else runs after it.
+    - name: Upgrade ansible and ansible-lint
+      ansible.builtin.shell: |
+        before=$(brew list --versions ansible ansible-lint 2>/dev/null | sort)
+        brew install -q ansible ansible-lint >/dev/null
+        after=$(brew list --versions ansible ansible-lint 2>/dev/null | sort)
+        [ "$before" = "$after" ] && echo CLEAN || echo CHANGED
+      register: ansible_upgrade
+      changed_when: "'CHANGED' in ansible_upgrade.stdout"
