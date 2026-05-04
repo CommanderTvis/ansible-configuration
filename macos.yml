@@ -383,17 +383,17 @@
         regexp: '^sdkman_auto_answer='
         line: sdkman_auto_answer=true
 
-    - name: Manage Temurin versions via SDKMAN (install, default, prune)
+    - name: Manage GraalVM versions via SDKMAN (install, default, prune)
       vars:
-        temurin_majors: ["25", "21"]
+        graalvm_majors: ["25", "21"]
       ansible.builtin.shell: |
         export SDKMAN_DIR={{ sdkman_dir }}
         source "${SDKMAN_DIR}/bin/sdkman-init.sh"
-        majors=({{ temurin_majors | join(' ') }})
+        majors=({{ graalvm_majors | join(' ') }})
         managed=()
         changed=0
         for major in "${majors[@]}"; do
-          id=$(sdk list java | grep -oE "${major}\.[0-9.]*-tem" | head -1)
+          id=$(sdk list java | grep -oE "${major}\.[0-9.]*-graal" | head -1)
           managed+=("$id")
           if [ ! -d "${SDKMAN_DIR}/candidates/java/${id}" ]; then
             sdk install java "$id"
