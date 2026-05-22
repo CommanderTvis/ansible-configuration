@@ -27,7 +27,6 @@
       - deno
       - colima
       - docker
-      - gitlab-runner
       - sdkman-cli
       - cocoapods
     sdkman_dir: /opt/homebrew/opt/sdkman-cli/libexec
@@ -58,7 +57,7 @@
       - vlc
       - gimp
       - syncthing-app
-      - qdirstat
+      - grandperspective
       - anki
       - obsidian
       - tailscale-app
@@ -75,7 +74,7 @@
       - monitorcontrol
       - whatsapp
       - microsoft-teams
-      - iterm2
+      - warp
       - steam
       - visual-studio-code
   tasks:
@@ -169,46 +168,6 @@
         state: latest
         accept_external_apps: true
         sudo_password: "{{ ansible_become_password }}"
-
-    - name: Create iTerm2 Dynamic Profiles directory
-      ansible.builtin.file:
-        path: "{{ ansible_facts['env']['HOME'] }}/Library/Application Support/iTerm2/DynamicProfiles"
-        state: directory
-        mode: "0755"
-
-    - name: Configure iTerm2 Drop-down profile (Yakuake-style)
-      ansible.builtin.copy:
-        dest: "{{ ansible_facts['env']['HOME'] }}/Library/Application Support/iTerm2/DynamicProfiles/dropdown.json"
-        mode: "0644"
-        content: |
-          {
-            "Profiles": [
-              {
-                "Name": "Drop-down",
-                "Guid": "drop-down-yakuake-style",
-                "Window Type": 2,
-                "Screen": -1,
-                "Width Percentage": 90,
-                "Height Percentage": 40,
-                "Has Hotkey": true,
-                "HotKey Key Code": 111,
-                "HotKey Characters": "\uf70f",
-                "HotKey Characters Ignoring Modifiers": "\uf70f",
-                "HotKey Modifier Flags": 0,
-                "HotKey Window AutoHides": true,
-                "HotKey Window Animates": true,
-                "HotKey Window Floats": true,
-                "HotKey Window Reopens On Activation": true,
-                "HotKey Activated By Modifier": false,
-                "HotKey Modifier Activation": 0,
-                "HotKey Alternate Shortcuts": [],
-                "Transparency": 0.3,
-                "Initial Use Transparency": true,
-                "Blur": true,
-                "Blur Radius": 5.0
-              }
-            ]
-          }
 
     - name: Install yarn globally with npm
       community.general.npm:
