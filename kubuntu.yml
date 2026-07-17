@@ -59,6 +59,7 @@
       - containerd.io
       - docker-buildx-plugin
       - docker-compose-plugin
+      - warp-terminal
     managed_flatpaks:
       - md.obsidian.Obsidian
       - com.system76.Popsicle
@@ -227,6 +228,18 @@
       ansible.builtin.shell: >
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" > /etc/apt/sources.list.d/docker.list
       args: { creates: /etc/apt/sources.list.d/docker.list }
+
+    # Warp
+    - name: Download Warp GPG key for APT
+      ansible.builtin.shell: >
+        curl -fsSL https://releases.warp.dev/linux/keys/warp.asc |
+        gpg --dearmor --output /etc/apt/keyrings/warpdotdev.gpg
+      args: { creates: /etc/apt/keyrings/warpdotdev.gpg }
+
+    - name: Add Warp repository
+      ansible.builtin.shell: >
+        echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/warpdotdev.gpg] https://releases.warp.dev/linux/deb stable main' > /etc/apt/sources.list.d/warpdotdev.list
+      args: { creates: /etc/apt/sources.list.d/warpdotdev.list }
 
     # =========================================================================
     # APT PACKAGE INSTALLATION (single step after all repos configured)
