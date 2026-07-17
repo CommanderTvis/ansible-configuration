@@ -27,6 +27,7 @@
       - gpg
       - pipx
       - openssh-server
+      - unzip
       # Development
       - maven
       - postgresql-client-17
@@ -286,6 +287,14 @@
         name: "{{ item }}"
         state: latest
       with_items: "{{ pipx_packages }}"
+
+    # Bun has no official APT repository or .deb package, so use the official
+    # installer once (guarded by creates); afterwards `bun upgrade` manages updates.
+    - name: Install Bun for user
+      become: false
+      ansible.builtin.shell: >
+        curl -fsSL https://bun.sh/install | bash
+      args: { creates: ~/.bun/bin/bun }
 
     - name: Enable service Syncthing
       become: false
