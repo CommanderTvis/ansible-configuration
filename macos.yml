@@ -24,16 +24,19 @@
       - chromia/core/chr
       - llvm # clangd
       - glab # GitLab
-      - deno
-      - colima
-      - docker
+      - deno # for yt-dlp
+      - container # Apple container
+      # -next prerelease: stable socktainer pins Apple container 0.11 and rejects 1.0
+      - socktainer/tap/socktainer-next
       - sdkman-cli
       - cocoapods
+      - awscli
+      - hcloud # Hetzner Cloud
     sdkman_dir: /opt/homebrew/opt/sdkman-cli/libexec
     homebrew_taps:
       - { name: sdkman/tap }
-      - { name: jetbrains-junie/junie }
       - { name: jetbrains/utils }
+      - { name: socktainer/tap }
       - name: chromia/core
         url: https://gitlab.com/chromaway/core-tools/homebrew-chromia.git
     homebrew_protected:
@@ -42,18 +45,17 @@
       # protect the bare names to keep the pruner from flagging them.
       - kotlin-lsp
       - chr
-      # ansible/ansible-lint are upgraded via a shell task at the end, not the
-      # homebrew module — upgrading the running ansible mid-task replaces its
-      # own .pyc files and breaks result deserialization (module_legacy_m2c).
+      - socktainer-next
+      # ansible/ansible-lint are upgraded by build.sh before the playbook runs —
+      # upgrading the running ansible from any task (even the last one) replaces
+      # its own files and breaks result deserialization (module_legacy_m2c).
       - ansible
       - ansible-lint
     homebrew_cask_apps:
-      - claude
       - telegram-desktop
       - brave-browser
       - google-chrome
       - 1password
-      - 1password-cli
       - vlc
       - gimp
       - syncthing-app
@@ -65,18 +67,15 @@
       - balenaetcher
       - jetbrains-toolbox
       - alt-tab
-      - zulip
       - claude
-      - slack
       - flux-app
       - philips-hue-sync
-      - zed
       - monitorcontrol
       - whatsapp
       - microsoft-teams
       - warp
       - steam
-      - visual-studio-code
+      - prismlauncher
   tasks:
     - name: Check if Rosetta is installed
       ansible.builtin.command: arch -x86_64 /usr/bin/true
@@ -186,22 +185,73 @@
       register: claude_code_install
       changed_when: "'INSTALLED' in claude_code_install.stdout"
 
-    - name: Bootstrap Colima VM and ensure it auto-starts via brew services
+    # `container system start` registers Apple's own launchd jobs and exits, so the
+    # formula's brew service (keep_alive true) respawn-loops with exit 1. Use a plain
+    # RunAtLoad LaunchAgent instead.
+    - name: Install LaunchAgent to start Apple container at login
+      ansible.builtin.copy:
+        dest: "{{ ansible_facts['env']['HOME'] }}/Library/LaunchAgents/com.commandertvis.container-start.plist"
+        mode: "0644"
+        content: |
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>Label</key>
+            <string>com.commandertvis.container-start</string>
+            <key>ProgramArguments</key>
+            <array>
+              <string>/opt/homebrew/bin/container</string>
+              <string>system</string>
+              <string>start</string>
+            </array>
+            <key>RunAtLoad</key>
+            <true/>
+          </dict>
+          </plist>
+
+    - name: Ensure Apple container services are running with a default kernel
       ansible.builtin.shell: |
         changed=0
-        if [ ! -d "$HOME/.colima/default" ]; then
-          colima start --cpu 4 --memory 12 --disk 60
-          colima stop
+        if ! container system status >/dev/null 2>&1; then
+          container system start
           changed=1
         fi
-        if ! brew services list | grep -q '^colima.*started'; then
-          colima stop 2>/dev/null || true
-          brew services start colima
+        if [ ! -f "$HOME/Library/Application Support/com.apple.container/kernels/default.kernel-arm64" ]; then
+          container system kernel set --recommended
           changed=1
         fi
         [ "$changed" -eq 1 ] && echo "CHANGED" || echo "CLEAN"
-      register: colima_setup
-      changed_when: "'CHANGED' in colima_setup.stdout"
+      register: container_setup
+      changed_when: "'CHANGED' in container_setup.stdout"
+
+    # socktainer (the Docker API for Apple container) is run by its Homebrew
+    # service. The old hand-rolled LaunchAgent existed only to pass
+    # --no-check-compatibility back when socktainer pinned Apple container 0.12 and
+    # rejected 1.0; socktainer-next now builds against 1.0, so the service's
+    # version check passes without flags. Two daemons binding the same socket
+    # load-balance requests and corrupt the Docker API, so the obsolete agent must
+    # be removed rather than left to race the brew service.
+    - name: Remove obsolete hand-rolled socktainer LaunchAgent
+      ansible.builtin.shell: |
+        changed=0
+        if launchctl print "gui/$(id -u)/com.commandertvis.socktainer" >/dev/null 2>&1; then
+          launchctl bootout "gui/$(id -u)/com.commandertvis.socktainer" 2>/dev/null || true
+          changed=1
+        fi
+        plist="$HOME/Library/LaunchAgents/com.commandertvis.socktainer.plist"
+        if [ -f "$plist" ]; then
+          rm -f "$plist"
+          changed=1
+        fi
+        [ "$changed" -eq 1 ] && echo "CHANGED" || echo "CLEAN"
+      register: socktainer_cleanup
+      changed_when: "'CHANGED' in socktainer_cleanup.stdout"
+
+    - name: Ensure socktainer brew service is running
+      community.general.homebrew_services:
+        name: socktainer-next
+        state: present
 
     - name: Ensure apps are login items
       ansible.builtin.shell: |
@@ -317,6 +367,9 @@
 
           # Claude Code (native install)
           export PATH="$HOME/.local/bin:$PATH"
+
+          # Docker-compatible API served by socktainer (Apple container backend)
+          export DOCKER_HOST="unix://$HOME/.socktainer/container.sock"
 
           # Default editor: Zed (--wait = callers block until the buffer closes)
           export EDITOR="zed --wait"
@@ -450,16 +503,3 @@
             done
           register: second_pass_removal
           changed_when: "'Force removing' in second_pass_removal.stdout"
-
-    # Must be the last task: upgrading ansible/ansible-lint via the homebrew
-    # module replaces the running ansible's own files mid-run and breaks
-    # result deserialization. Doing it via a final shell task is safe because
-    # nothing else runs after it.
-    - name: Upgrade ansible and ansible-lint
-      ansible.builtin.shell: |
-        before=$(brew list --versions ansible ansible-lint 2>/dev/null | sort)
-        brew install -q ansible ansible-lint >/dev/null
-        after=$(brew list --versions ansible ansible-lint 2>/dev/null | sort)
-        [ "$before" = "$after" ] && echo CLEAN || echo CHANGED
-      register: ansible_upgrade
-      changed_when: "'CHANGED' in ansible_upgrade.stdout"

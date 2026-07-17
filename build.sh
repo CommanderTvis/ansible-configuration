@@ -20,14 +20,14 @@ else
     exit 1
 fi
 
-# Install Ansible
-if ! command -v ansible-playbook >/dev/null 2>&1; then
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        brew install ansible
-    else
-        sudo apt update
-        sudo apt install -y ansible
-    fi
+# Install/upgrade Ansible. On macOS this must happen here, not in the playbook:
+# upgrading the running ansible from a task replaces its own files mid-run and
+# breaks module result deserialization (module_legacy_m2c).
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    brew install -q ansible ansible-lint
+elif ! command -v ansible-playbook >/dev/null 2>&1; then
+    sudo apt update
+    sudo apt install -y ansible
 fi
 
 ansible-galaxy collection install -r requirements.yml --upgrade
