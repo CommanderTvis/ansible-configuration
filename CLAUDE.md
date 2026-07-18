@@ -2,7 +2,7 @@
 
 ## Overview
 
-Personal Ansible playbooks for automating macOS and Kubuntu 25.10 system setup. Playbooks run locally on the target machine (no remote hosts).
+Personal Ansible playbooks for automating macOS and Kubuntu 26.04 system setup. Playbooks run locally on the target machine (no remote hosts).
 
 ## Commands
 
@@ -23,7 +23,7 @@ ansible-playbook -i 'localhost,' -c local kubuntu.yml --check
 ## Architecture
 
 - `build.sh` - Entry point; detects OS, installs Ansible if needed, runs appropriate playbook with OS-specific options
-- `kubuntu.yml` - Kubuntu 25.10 playbook (APT packages, Flatpaks, third-party repos, pipx tools, systemd services, pruning of unmanaged packages)
+- `kubuntu.yml` - Kubuntu 26.04 playbook (APT packages, Flatpaks, third-party repos, pipx tools, systemd services, pruning of unmanaged packages)
 - `macos.yml` - macOS playbook (Homebrew formulae/casks, npm global package (yarn), two-pass pruning of unmanaged packages)
 - `requirements.yml` - Ansible Galaxy dependency: `community.general` collection v10.0.0+ (required for homebrew, flatpak, git_config, pipx, npm modules)
 - `kubuntu.cfg` - Kubuntu-specific Ansible configuration (used via ANSIBLE_CONFIG environment variable in build.sh)

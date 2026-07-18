@@ -1,5 +1,5 @@
 ---
-- name: Ansible for Kubuntu 25.10
+- name: Ansible for Kubuntu 26.04
   hosts: all
   become: true
   vars:
@@ -28,9 +28,9 @@
       - pipx
       - openssh-server
       - unzip
+      - zip # required by the SDKMAN installer
       # Development
-      - maven
-      - postgresql-client-17
+      - postgresql-client-18
       - software-properties-common
       - apt-transport-https
       # Desktop applications
@@ -52,6 +52,10 @@
       - qml-module-org-kde-notifications
       # Third-party repositories
       - tailscale
+      # Brave via APT (not Flatpak) on purpose: the Flatpak build is sandboxed
+      # and cannot reach 1Password's native-messaging host, so the 1Password
+      # browser extension fails to connect. The APT build talks to 1Password's
+      # NMH, so keep Brave on APT.
       - brave-browser
       - 1password
       - 1password-cli
@@ -67,6 +71,16 @@
       - net.ankiweb.Anki
       - org.zulip.Zulip
       - dev.zed.Zed
+    # Kubuntu default apps to purge as bloatware. These arrive as
+    # kubuntu-desktop *recommends* (auto-installed), so the exclusion-based
+    # prune below never sees them and they must be removed explicitly. Purging a
+    # not-installed package is a harmless no-op, and re-running removes any that
+    # a kubuntu-desktop upgrade dragged back in via recommends.
+    bloatware_apt_packages:
+      - kate
+      - kcalc
+      - kcharselect
+      - ksystemlog
     # APT packages that should NOT be removed (essential system packages)
     protected_apt_packages:
       # Package management and system foundations
@@ -161,7 +175,7 @@
     # =========================================================================
     - name: Enable the Ubuntu restricted repository
       ansible.builtin.apt_repository:
-        repo: "deb https://archive.ubuntu.com/ubuntu {{ ansible_distribution_release }} restricted"
+        repo: "deb https://archive.ubuntu.com/ubuntu {{ ansible_facts['distribution_release'] }} restricted"
         state: present
 
     - name: Create APT keyrings directory
@@ -173,13 +187,15 @@
     # Tailscale
     - name: Download Tailscale GPG key
       ansible.builtin.shell: >
-        curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/plucky.noarmor.gpg > /usr/share/keyrings/tailscale-archive-keyring.gpg
+        curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/resolute.noarmor.gpg > /usr/share/keyrings/tailscale-archive-keyring.gpg
       args: { creates: /usr/share/keyrings/tailscale-archive-keyring.gpg }
 
     - name: Add Tailscale repository
+      # No 'creates:' guard on purpose: a release upgrade (do-release-upgrade)
+      # disables third-party sources, so re-establish the list every run to self-heal.
       ansible.builtin.shell: >
-        curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/plucky.tailscale-keyring.list > /etc/apt/sources.list.d/tailscale.list
-      args: { creates: /etc/apt/sources.list.d/tailscale.list }
+        curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/resolute.tailscale-keyring.list > /etc/apt/sources.list.d/tailscale.list
+      changed_when: false
 
     # Brave Browser
     - name: Get Brave GPG key
@@ -189,10 +205,12 @@
       args: { creates: /usr/share/keyrings/brave-browser-archive-keyring.gpg }
 
     - name: Add Brave browser release sources
+      # No 'creates:' guard on purpose: a release upgrade disables third-party
+      # sources (sets Enabled:no), so re-fetch the canonical file every run to self-heal.
       ansible.builtin.shell: >
         curl -fsSLo /etc/apt/sources.list.d/brave-browser-release.sources
         https://brave-browser-apt-release.s3.brave.com/brave-browser.sources
-      args: { creates: /etc/apt/sources.list.d/brave-browser-release.sources }
+      changed_when: false
 
     # 1Password
     - name: Download 1Password GPG key for APT
@@ -202,9 +220,11 @@
       args: { creates: /usr/share/keyrings/1password-archive-keyring.gpg }
 
     - name: Add 1Password repository
+      # No 'creates:' guard on purpose: a release upgrade disables third-party
+      # sources, so rewrite the list every run to self-heal.
       ansible.builtin.shell: >
         echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/amd64 stable main' > /etc/apt/sources.list.d/1password.list
-      args: { creates: /etc/apt/sources.list.d/1password.list }
+      changed_when: false
 
     - name: Setup 1Password debsig verification
       ansible.builtin.shell: |
@@ -231,11 +251,14 @@
       args: { creates: /etc/apt/sources.list.d/docker.list }
 
     # Warp
-    - name: Download Warp GPG key for APT
+    - name: Refresh Warp GPG key for APT
+      # No 'creates:' guard on purpose: Warp's signing key expires (~yearly),
+      # so re-fetch and overwrite every run to self-heal before it goes stale.
       ansible.builtin.shell: >
+        set -o pipefail &&
         curl -fsSL https://releases.warp.dev/linux/keys/warp.asc |
-        gpg --dearmor --output /etc/apt/keyrings/warpdotdev.gpg
-      args: { creates: /etc/apt/keyrings/warpdotdev.gpg }
+        gpg --dearmor --yes --output /etc/apt/keyrings/warpdotdev.gpg
+      changed_when: false
 
     - name: Add Warp repository
       ansible.builtin.shell: >
@@ -245,9 +268,31 @@
     # =========================================================================
     # APT PACKAGE INSTALLATION (single step after all repos configured)
     # =========================================================================
-    - name: Install all managed APT packages
+    - name: Update APT cache
       ansible.builtin.apt:
         update_cache: true
+
+    - name: List upgradable APT packages # noqa: command-instead-of-module
+      ansible.builtin.command: apt list --upgradable
+      register: apt_upgradable
+      changed_when: false
+      check_mode: false
+
+    # Visibility only: show what the next two tasks will actually do, without
+    # needing to run ansible-playbook in verbose mode.
+    - name: Show pending APT changes
+      vars:
+        new_apt_packages: "{{ managed_apt_packages | difference(ansible_facts.packages.keys() | list) }}"
+        upgradable_lines: "{{ apt_upgradable.stdout_lines | reject('match', 'Listing') | list }}"
+      ansible.builtin.debug:
+        msg: |-
+          New packages to install ({{ new_apt_packages | length }}):
+          {{ new_apt_packages | join('\n') if new_apt_packages else '(none)' }}
+          Packages to upgrade ({{ upgradable_lines | length }}):
+          {{ upgradable_lines | join('\n') if upgradable_lines else '(none)' }}
+
+    - name: Install all managed APT packages
+      ansible.builtin.apt:
         name: "{{ managed_apt_packages }}"
         state: present
 
@@ -269,24 +314,59 @@
         state: present
       loop: "{{ managed_flatpaks }}"
 
+    # Guarantee the system Python stays externally-managed (PEP 668) so nothing
+    # can pip-install into the global environment. force:false creates the marker
+    # only if missing, never fighting the OS-shipped copy on upgrades.
+    - name: Lock the global Python environment against pip installs (PEP 668)
+      ansible.builtin.copy:
+        dest: "/usr/lib/python{{ ansible_facts['python']['version']['major'] }}.{{ ansible_facts['python']['version']['minor'] }}/EXTERNALLY-MANAGED"
+        force: false
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [externally-managed]
+          Error=This system's Python is externally managed. Install tools with pipx or uv/uvx, never pip into the global environment.
+
     - name: Configure pipx for user
       become: false
       ansible.builtin.command: pipx ensurepath
-
       register: pipx_ensurepath
       changed_when: false
 
-    - name: Install pipx packages
+    - name: List pipx packages before upgrade
       become: false
-      vars:
-        pipx_packages:
-          - poetry
-          - uv
-          - yt-dlp
+      ansible.builtin.command: pipx list --short
+      register: pipx_before
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    # pipx bootstraps uv only. Every other CLI tool is run through a uvx/bunx
+    # wrapper (below), so nothing else is persistently installed.
+    - name: Install uv via pipx
+      become: false
       community.general.pipx:
-        name: "{{ item }}"
+        name: uv
         state: latest
-      with_items: "{{ pipx_packages }}"
+      register: uv_pipx
+
+    - name: List pipx packages after upgrade
+      become: false
+      ansible.builtin.command: pipx list --short
+      register: pipx_after
+      changed_when: false
+      check_mode: false
+
+    # Visibility only: show the version change when uv was installed/upgraded.
+    - name: Show uv version change
+      ansible.builtin.debug:
+        msg: >-
+          uv: {{ pipx_before.stdout_lines | default([]) | select('match', '^uv ')
+          | first | default('not installed') }}
+          -> {{ pipx_after.stdout_lines | default([]) | select('match', '^uv ')
+          | first | default('unknown') }}
+      when: pipx_before.stdout | default('') != pipx_after.stdout
 
     # Bun has no official APT repository or .deb package, so use the official
     # installer once (guarded by creates); afterwards `bun upgrade` manages updates.
@@ -295,6 +375,164 @@
       ansible.builtin.shell: >
         curl -fsSL https://bun.sh/install | bash
       args: { creates: ~/.bun/bin/bun }
+
+    # SDKMAN has no APT package, so use the official installer once (guarded by
+    # creates); afterwards `sdk selfupdate` manages updates. The installer
+    # appends its own init lines to ~/.bashrc and ~/.zshrc.
+    - name: Install SDKMAN for user
+      become: false
+      ansible.builtin.shell: >
+        set -o pipefail &&
+        curl -s https://get.sdkman.io | bash
+      args:
+        creates: ~/.sdkman/bin/sdkman-init.sh
+        executable: /bin/bash
+
+    - name: Enable SDKMAN auto-answer for non-interactive use
+      become: false
+      ansible.builtin.lineinfile:
+        path: ~/.sdkman/etc/config
+        regexp: '^sdkman_auto_answer='
+        line: sdkman_auto_answer=true
+
+    - name: Manage GraalVM versions via SDKMAN (install, default, prune)
+      become: false
+      vars:
+        graalvm_majors: ["25", "21"]
+      ansible.builtin.shell: |
+        export SDKMAN_DIR="$HOME/.sdkman"
+        source "${SDKMAN_DIR}/bin/sdkman-init.sh"
+        majors=({{ graalvm_majors | join(' ') }})
+        managed=()
+        changed=0
+        for major in "${majors[@]}"; do
+          id=$(sdk list java | grep -oE "${major}\.[0-9.]*-graal" | head -1)
+          managed+=("$id")
+          if [ ! -d "${SDKMAN_DIR}/candidates/java/${id}" ]; then
+            echo "INSTALL java ${id}"
+            sdk install java "$id"
+            changed=1
+          fi
+        done
+        sdk default java "${managed[0]}"
+        for dir in "${SDKMAN_DIR}/candidates/java"/*/; do
+          ver=$(basename "$dir")
+          [ "$ver" = "current" ] && continue
+          keep=0
+          for m in "${managed[@]}"; do
+            [ "$ver" = "$m" ] && keep=1 && break
+          done
+          if [ "$keep" -eq 0 ]; then
+            echo "UNINSTALL java ${ver}"
+            sdk uninstall java "$ver"
+            changed=1
+          fi
+        done
+        [ "$changed" -eq 1 ] && echo "CHANGED" || echo "CLEAN"
+      args:
+        executable: /bin/bash
+      register: sdk_manage
+      changed_when: "'CHANGED' in sdk_manage.stdout"
+
+    # Visibility only: surface which JDKs the task above installed/removed,
+    # without needing to run ansible-playbook in verbose mode.
+    - name: Show GraalVM changes
+      ansible.builtin.debug:
+        msg: "{{ sdk_manage.stdout_lines | select('match', '^(INSTALL|UNINSTALL) ') | list }}"
+      when: "'CHANGED' in sdk_manage.stdout"
+
+    # Register Claude Code as the `claude` command. bunx fetches/runs the latest
+    # published package on each invocation, so there is nothing to keep updated.
+    - name: Ensure user local bin directory exists
+      become: false
+      ansible.builtin.file:
+        path: ~/.local/bin
+        state: directory
+        mode: "0755"
+
+    - name: Register Claude Code as the `claude` command via bunx
+      become: false
+      ansible.builtin.copy:
+        dest: ~/.local/bin/claude
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          exec "$HOME/.bun/bin/bunx" --bun @anthropic-ai/claude-code "$@"
+
+    # yt-dlp is run ephemerally via uvx (always latest, nothing installed).
+    - name: Register yt-dlp as a uvx wrapper
+      become: false
+      ansible.builtin.copy:
+        dest: ~/.local/bin/yt-dlp
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          exec "$HOME/.local/bin/uvx" yt-dlp "$@"
+
+    - name: Ensure ~/.claude directory exists
+      become: false
+      ansible.builtin.file:
+        path: ~/.claude
+        state: directory
+        mode: "0755"
+
+    # Seed the global Claude Code instructions only if the file does not exist yet
+    # (force:false), so a hand-edited ~/.claude/CLAUDE.md is never overwritten.
+    # Content is embedded inline on purpose — this repo is a single playbook.
+    - name: Seed global Claude Code instructions if absent
+      become: false
+      ansible.builtin.copy:
+        dest: ~/.claude/CLAUDE.md
+        force: false
+        mode: "0644"
+        content: |
+          # Global instructions
+
+          ## This machine is declaratively managed — do NOT install software ad hoc
+
+          This machine's software is provisioned declaratively and centrally. Assume
+          anything you might want is either already provided or intentionally absent.
+
+          **Before installing anything, don't.** No `apt install`, `pip install`,
+          `pipx install`, `snap install`, or pipe-to-shell installers to add tools on
+          the fly.
+
+          - If something seems genuinely needed long-term, ask me — don't add it yourself.
+          - Manually-installed APT packages outside the managed set get removed
+            automatically, so ad-hoc `apt install` isn't durable anyway.
+          - For a one-off, prefer an ephemeral runner (`uvx <tool>` for Python CLIs,
+            `bunx <pkg>` for JS) over installing.
+
+          ## The global Python environment is locked (PEP 668) — never touch it
+
+          System Python is marked externally-managed. **Never** `pip install` into it or
+          use `--break-system-packages`. There is deliberately no global `pip`.
+
+          - Run Python CLIs ephemerally: `uvx <tool>` (e.g. `uvx yt-dlp ...`).
+          - Only if a persistent install is genuinely needed, as a last resort:
+            `uv tool install <tool>`.
+
+          ## JS
+
+          `bun` is the runtime; use `bunx <pkg>` to run JS packages.
+
+          ## Java/JVM — JDKs are managed declaratively via SDKMAN
+
+          GraalVM JDKs (majors 25 and 21; 25 is the default `java`) are
+          provisioned via SDKMAN. Any JDK outside the managed set is removed
+          automatically, so never install JDKs ad hoc (`apt install openjdk-*`,
+          manual `sdk install`) — if another version is genuinely needed, ask me.
+
+          `sdk` is available in interactive shells; in non-interactive shells
+          `source "$HOME/.sdkman/bin/sdkman-init.sh"` first.
+
+          ## Already installed — don't reinstall
+
+          git, curl, wget, gpg, unzip, zip, tree, fastfetch, openssh-server,
+          `postgresql-client-18`, docker (ce + compose + buildx), tailscale,
+          1password-cli, pipx, ansible, ansible-lint, `uv`/`uvx`, `bun`/`bunx`,
+          SDKMAN (`sdk`) with GraalVM JDKs 25 (default) and 21, `claude`
+          (Claude Code via bunx wrapper), `yt-dlp` (uvx wrapper).
 
     - name: Enable service Syncthing
       become: false
@@ -349,6 +587,17 @@
             name: "{{ item }}"
             state: absent
           loop: "{{ unmanaged_flatpaks }}"
+
+    # =========================================================================
+    # CLEANUP: Purge Kubuntu bloatware (auto-installed, so invisible to the
+    # exclusion-based prune below — must be removed by explicit name)
+    # =========================================================================
+    - name: Purge Kubuntu bloatware packages
+      ansible.builtin.apt:
+        name: "{{ bloatware_apt_packages }}"
+        state: absent
+        purge: true
+        autoremove: true
 
     # =========================================================================
     # CLEANUP: Remove unmanaged APT packages

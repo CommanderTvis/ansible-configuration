@@ -6,8 +6,8 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     PLAYBOOK="macos.yml"
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
     # Check Ubuntu version
-    if ! grep -q "Ubuntu 25.10" /etc/os-release; then
-        echo "Error: Only Ubuntu 25.10 is supported on Linux"
+    if ! grep -q "Ubuntu 26.04" /etc/os-release; then
+        echo "Error: Only Ubuntu 26.04 is supported on Linux"
         exit 1
     fi
     # Warn if Kubuntu is not installed (playbook will install it)
