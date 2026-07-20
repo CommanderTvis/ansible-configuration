@@ -285,11 +285,11 @@
         new_apt_packages: "{{ managed_apt_packages | difference(ansible_facts.packages.keys() | list) }}"
         upgradable_lines: "{{ apt_upgradable.stdout_lines | reject('match', 'Listing') | list }}"
       ansible.builtin.debug:
-        msg: |-
-          New packages to install ({{ new_apt_packages | length }}):
-          {{ new_apt_packages | join('\n') if new_apt_packages else '(none)' }}
-          Packages to upgrade ({{ upgradable_lines | length }}):
-          {{ upgradable_lines | join('\n') if upgradable_lines else '(none)' }}
+        msg: >-
+          {{ ['New packages to install (' ~ new_apt_packages | length ~ '):']
+          + (new_apt_packages or ['(none)'])
+          + ['Packages to upgrade (' ~ upgradable_lines | length ~ '):']
+          + (upgradable_lines or ['(none)']) }}
 
     - name: Install all managed APT packages
       ansible.builtin.apt:

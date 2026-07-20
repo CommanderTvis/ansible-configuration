@@ -113,6 +113,44 @@
       loop_control:
         label: "{{ item.name }}"
 
+    - name: Gather pre-install Homebrew state
+      block:
+        - name: List installed formulae before install
+          ansible.builtin.command: brew list --formula -1
+          register: pre_formulae
+          changed_when: false
+          failed_when: false
+          check_mode: false
+        - name: List installed casks before install
+          ansible.builtin.command: brew list --cask -1
+          register: pre_casks
+          changed_when: false
+          failed_when: false
+          check_mode: false
+        - name: List outdated Homebrew packages
+          ansible.builtin.command: brew outdated --verbose
+          register: brew_outdated
+          changed_when: false
+          failed_when: false
+          check_mode: false
+
+    # Visibility only: show what the install tasks below will actually do,
+    # without needing to run ansible-playbook in verbose mode. Tapped formulae
+    # are listed by `brew list` without the tap prefix, so compare basenames.
+    - name: Show pending Homebrew changes
+      vars:
+        new_formulae: "{{ homebrew_packages | map('basename') | difference(pre_formulae.stdout_lines | default([])) }}"
+        new_casks: "{{ homebrew_cask_apps | difference(pre_casks.stdout_lines | default([])) }}"
+        outdated: "{{ brew_outdated.stdout_lines | default([]) }}"
+      ansible.builtin.debug:
+        msg: >-
+          {{ ['New formulae to install (' ~ new_formulae | length ~ '):']
+          + (new_formulae or ['(none)'])
+          + ['New casks to install (' ~ new_casks | length ~ '):']
+          + (new_casks or ['(none)'])
+          + ['Packages to upgrade (' ~ outdated | length ~ '):']
+          + (outdated or ['(none)']) }}
+
     - name: Install Homebrew formula packages
       community.general.homebrew:
         name: "{{ homebrew_packages }}"
@@ -409,6 +447,7 @@
           id=$(sdk list java | grep -oE "${major}\.[0-9.]*-graal" | head -1)
           managed+=("$id")
           if [ ! -d "${SDKMAN_DIR}/candidates/java/${id}" ]; then
+            echo "INSTALL java ${id}"
             sdk install java "$id"
             changed=1
           fi
@@ -422,6 +461,7 @@
             [ "$ver" = "$m" ] && keep=1 && break
           done
           if [ "$keep" -eq 0 ]; then
+            echo "UNINSTALL java ${ver}"
             sdk uninstall java "$ver"
             changed=1
           fi
@@ -431,6 +471,13 @@
         executable: /bin/bash
       register: sdk_manage
       changed_when: "'CHANGED' in sdk_manage.stdout"
+
+    # Visibility only: surface which JDKs the task above installed/removed,
+    # without needing to run ansible-playbook in verbose mode.
+    - name: Show GraalVM changes
+      ansible.builtin.debug:
+        msg: "{{ sdk_manage.stdout_lines | select('match', '^(INSTALL|UNINSTALL) ') | list }}"
+      when: "'CHANGED' in sdk_manage.stdout"
 
     - name: Gather installed packages and dependencies
       block:
