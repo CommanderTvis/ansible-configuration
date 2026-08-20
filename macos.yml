@@ -34,6 +34,7 @@
       - awscli
       - hcloud # Hetzner Cloud
     sdkman_dir: /opt/homebrew/opt/sdkman-cli/libexec
+    homebrew_tap_hue_manager: /opt/homebrew/Library/Taps/commandertvis/homebrew-hue-manager
     homebrew_taps:
       - { name: sdkman/tap }
       - { name: jetbrains/utils }
@@ -100,12 +101,16 @@
       loop_control:
         label: "{{ item.name }}"
 
-    # The Cask lives on an orphan `brew` branch of the app repo, and
-    # community.general.homebrew_tap cannot pick a branch.
+    # The Cask lives on an orphan `brew` branch of the app repo. `brew tap` can
+    # only clone a repository's default branch (it dropped --branch), so clone
+    # it by hand — Homebrew treats any checkout under Library/Taps as a tap.
     - name: Tap commandertvis/hue-manager (Cask on the brew branch)
       ansible.builtin.command:
-        cmd: brew tap commandertvis/hue-manager https://github.com/CommanderTvis/hue-manager.git --branch brew
-        creates: "{{ ansible_facts['env']['HOME'] }}/Library/Taps/commandertvis/homebrew-hue-manager"
+        cmd: >-
+          git clone --branch brew --single-branch
+          https://github.com/CommanderTvis/hue-manager.git
+          {{ homebrew_tap_hue_manager }}
+        creates: "{{ homebrew_tap_hue_manager }}"
 
     - name: Gather pre-install Homebrew state
       block:
