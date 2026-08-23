@@ -41,7 +41,6 @@
       # tapped formulae are listed by `brew list` without the tap prefix, so
       # protect the bare names to keep the pruner from flagging them.
       - kotlin-lsp
-      - chr
       - socktainer-next
       # ansible/ansible-lint are upgraded by build.sh before the playbook runs —
       # upgrading the running ansible from any task (even the last one) replaces
