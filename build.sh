@@ -4,6 +4,10 @@ set -e
 # Check OS and set playbook
 if [[ "$OSTYPE" == "darwin"* ]]; then
     PLAYBOOK="macos.yml"
+    # Homebrew 5+ asks for confirmation before installing/upgrading by default,
+    # which hangs this script and every brew call the playbook makes. Exported so
+    # ansible-playbook inherits it.
+    export HOMEBREW_NO_ASK=1
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
     # Check Ubuntu version
     if ! grep -q "Ubuntu 26.04" /etc/os-release; then

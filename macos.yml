@@ -22,7 +22,6 @@
       - pyright
       - typescript-language-server
       - jetbrains/utils/kotlin-lsp
-      - chromia/core/chr
       - llvm # clangd
       - glab # GitLab
       - deno # for yt-dlp
@@ -31,7 +30,6 @@
       - socktainer/tap/socktainer-next
       - sdkman-cli
       - cocoapods
-      - awscli
       - hcloud # Hetzner Cloud
     sdkman_dir: /opt/homebrew/opt/sdkman-cli/libexec
     homebrew_tap_hue_manager: /opt/homebrew/Library/Taps/commandertvis/homebrew-hue-manager
@@ -39,8 +37,6 @@
       - { name: sdkman/tap }
       - { name: jetbrains/utils }
       - { name: socktainer/tap }
-      - name: chromia/core
-        url: https://gitlab.com/chromaway/core-tools/homebrew-chromia.git
     homebrew_protected:
       # tapped formulae are listed by `brew list` without the tap prefix, so
       # protect the bare names to keep the pruner from flagging them.
