@@ -1,6 +1,12 @@
 #!/bin/bash
 set -e
 
+# ansible-core 2.21 derives the connection user from getpass.getuser(), which
+# prefers $LOGNAME. macOS zsh sets LOGNAME from getlogin(), which can report a
+# stale utmpx owner (e.g. root) for the tty; ansible then tries to use
+# /var/root/.ansible/tmp and every task is UNREACHABLE.
+export LOGNAME="$(id -un)"
+
 # Check OS and set playbook
 if [[ "$OSTYPE" == "darwin"* ]]; then
     PLAYBOOK="macos.yml"
