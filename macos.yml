@@ -23,7 +23,6 @@
       - typescript-language-server
       - jetbrains/utils/kotlin-lsp
       - llvm # clangd
-      - glab # GitLab
       - deno # for yt-dlp
       - container # Apple container
       # -next prerelease: stable socktainer pins Apple container 0.11 and rejects 1.0
@@ -48,6 +47,7 @@
       # its own files and breaks result deserialization (module_legacy_m2c).
       - ansible
       - ansible-lint
+      - cryptography
     homebrew_cask_apps:
       - hue-manager
       - telegram-desktop
@@ -71,9 +71,11 @@
       - whatsapp
       - microsoft-teams
       - discord
-      - warp
+      - ghostty
+      - telegram
       - steam
       - prismlauncher
+      - codex
   tasks:
     - name: Check if Rosetta is installed
       ansible.builtin.command: arch -x86_64 /usr/bin/true
@@ -158,9 +160,24 @@
         accept_external_apps: true
         sudo_password: "{{ ansible_become_password }}"
 
-    - name: Install yarn globally with npm
+    - name: Ensure Ghostty configuration directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_facts['env']['HOME'] }}/Library/Application Support/com.mitchellh.ghostty"
+        state: directory
+        mode: "0755"
+
+    - name: Configure Ghostty
+      ansible.builtin.copy:
+        dest: "{{ ansible_facts['env']['HOME'] }}/Library/Application Support/com.mitchellh.ghostty/config.ghostty"
+        mode: "0644"
+        content: |
+          font-family = JetBrains Mono
+          keybind = global:f12=toggle_quick_terminal
+          quick-terminal-position = top
+
+    - name: Install bun globally with npm
       community.general.npm:
-        name: yarn
+        name: bun
         global: true
         state: latest
 

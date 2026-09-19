@@ -24,7 +24,7 @@ ansible-playbook -i 'localhost,' -c local kubuntu.yml --check
 
 - `build.sh` - Entry point; detects OS, installs Ansible if needed, runs appropriate playbook with OS-specific options
 - `kubuntu.yml` - Kubuntu 26.04 playbook (APT packages, Flatpaks, third-party repos, pipx tools, systemd services, pruning of unmanaged packages)
-- `macos.yml` - macOS playbook (Homebrew formulae/casks, npm global package (yarn), two-pass pruning of unmanaged packages)
+- `macos.yml` - macOS playbook (Homebrew formulae/casks, npm global package (bun), two-pass pruning of unmanaged packages)
 - `requirements.yml` - Ansible Galaxy dependency: `community.general` collection v10.0.0+ (required for homebrew, flatpak, git_config, pipx, npm modules)
 - `kubuntu.cfg` - Kubuntu-specific Ansible configuration (used via ANSIBLE_CONFIG environment variable in build.sh)
 
