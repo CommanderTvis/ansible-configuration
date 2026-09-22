@@ -31,6 +31,7 @@
       - cocoapods
       - hcloud # Hetzner Cloud
       - rustup
+      - tea # Gitea/Forgejo CLI
     sdkman_dir: /opt/homebrew/opt/sdkman-cli/libexec
     homebrew_tap_hue_manager: /opt/homebrew/Library/Taps/commandertvis/homebrew-hue-manager
     homebrew_taps:
