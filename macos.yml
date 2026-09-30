@@ -1,0 +1,546 @@
+---
+- name: Ansible for macOS with Homebrew
+  hosts: all
+  vars:
+    ansible_python_interpreter: auto_silent
+    homebrew_packages:
+      - wget
+      - tree
+      - git
+      - git-lfs
+      - curl
+      - fastfetch
+      - gource
+      - node
+      - pnpm
+      - ffmpeg
+      - uv
+      - tmux
+      - gh # GitHub
+      - ripgrep
+      - pyright
+      - typescript-language-server
+      - jetbrains/utils/kotlin-lsp
+      - llvm # clangd
+      - deno # for yt-dlp
+      - container # Apple container
+      # -next prerelease: stable socktainer pins Apple container 0.11 and rejects 1.0
+      - socktainer/tap/socktainer-next
+      - sdkman-cli
+      - cocoapods
+      - hcloud # Hetzner Cloud
+      - rustup
+      - tea # Gitea/Forgejo CLI
+    sdkman_dir: /opt/homebrew/opt/sdkman-cli/libexec
+    homebrew_taps:
+      - { name: sdkman/tap }
+      - { name: jetbrains/utils }
+      - { name: socktainer/tap }
+      - { name: leonatwork/tap }
+    homebrew_protected:
+      # tapped formulae are listed by `brew list` without the tap prefix, so
+      # protect the bare names to keep the pruner from flagging them.
+      - kotlin-lsp
+      - socktainer-next
+      # ansible/ansible-lint are upgraded by build.sh before the playbook runs —
+      # upgrading the running ansible from any task (even the last one) replaces
+      # its own files and breaks result deserialization (module_legacy_m2c).
+      - ansible
+      - ansible-lint
+      - cryptography
+    homebrew_cask_apps:
+      - brave-browser
+      - google-chrome
+      - 1password
+      - vlc
+      - gimp
+      - syncthing-app
+      - grandperspective
+      - anki
+      - obsidian
+      - tailscale-app
+      - font-jetbrains-mono
+      - jetbrains-toolbox
+      - tappi
+      - flux-app
+      - philips-hue-sync
+      - hue-manager
+      - monitorcontrol
+      - whatsapp
+      - microsoft-teams
+      - discord
+      - ghostty
+      - telegram
+      - steam
+      - prismlauncher
+      - codex
+  tasks:
+    - name: Check if Rosetta is installed
+      ansible.builtin.command: arch -x86_64 /usr/bin/true
+      register: rosetta_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install Rosetta 2
+      ansible.builtin.command: softwareupdate --install-rosetta --agree-to-license
+      when: rosetta_check.rc != 0
+
+    - name: Update Homebrew
+      community.general.homebrew: { update_homebrew: true }
+
+    - name: Tap Homebrew repositories
+      community.general.homebrew_tap:
+        name: "{{ item.name }}"
+        url: "{{ item.url | default(omit) }}"
+        state: present
+      loop: "{{ homebrew_taps }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Locate Homebrew repository
+      ansible.builtin.command: brew --repository
+      register: homebrew_repository
+      changed_when: false
+      check_mode: false
+
+    - name: Install Hue Manager tap from its brew branch
+      ansible.builtin.git:
+        repo: https://github.com/CommanderTvis/hue-manager.git
+        dest: "{{ homebrew_repository.stdout }}/Library/Taps/commandertvis/homebrew-hue-manager"
+        version: brew
+
+    - name: Gather pre-install Homebrew state
+      block:
+        - name: List installed formulae before install
+          ansible.builtin.command: brew list --formula -1
+          register: pre_formulae
+          changed_when: false
+          failed_when: false
+          check_mode: false
+        - name: List installed casks before install
+          ansible.builtin.command: brew list --cask -1
+          register: pre_casks
+          changed_when: false
+          failed_when: false
+          check_mode: false
+        - name: List outdated Homebrew packages
+          ansible.builtin.command: brew outdated --verbose
+          register: brew_outdated
+          changed_when: false
+          failed_when: false
+          check_mode: false
+        - name: List outdated Homebrew formulae to upgrade
+          ansible.builtin.command: brew outdated --formula --quiet
+          register: brew_outdated_formulae
+          changed_when: false
+          check_mode: false
+
+    # Visibility only: show what the install tasks below will actually do,
+    # without needing to run ansible-playbook in verbose mode. Tapped formulae
+    # are listed by `brew list` without the tap prefix, so compare basenames.
+    - name: Show pending Homebrew changes
+      vars:
+        new_formulae: "{{ homebrew_packages | map('basename') | difference(pre_formulae.stdout_lines | default([])) }}"
+        new_casks: "{{ homebrew_cask_apps | difference(pre_casks.stdout_lines | default([])) }}"
+        outdated: "{{ brew_outdated.stdout_lines | default([]) }}"
+      ansible.builtin.debug:
+        msg: >-
+          {{ ['New formulae to install (' ~ new_formulae | length ~ '):']
+          + (new_formulae or ['(none)'])
+          + ['New casks to install (' ~ new_casks | length ~ '):']
+          + (new_casks or ['(none)'])
+          + ['Packages to upgrade (' ~ outdated | length ~ '):']
+          + (outdated or ['(none)']) }}
+
+    - name: Install Homebrew formula packages
+      community.general.homebrew:
+        name: "{{ homebrew_packages + (brew_outdated_formulae.stdout_lines | difference(homebrew_protected)) }}"
+        state: latest
+
+    - name: Install Homebrew cask applications
+      community.general.homebrew_cask:
+        name: "{{ homebrew_cask_apps }}"
+        state: latest
+        accept_external_apps: true
+        sudo_password: "{{ ansible_become_password }}"
+
+    # Tappi is ad-hoc signed, not notarized, and Homebrew dropped --no-quarantine.
+    - name: Check Tappi quarantine flag
+      ansible.builtin.command: /usr/bin/xattr -p com.apple.quarantine /Applications/Tappi.app
+      register: tappi_quarantine
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Remove Tappi quarantine flag
+      ansible.builtin.command: /usr/bin/xattr -dr com.apple.quarantine /Applications/Tappi.app
+      when: tappi_quarantine.rc == 0
+      changed_when: true
+
+    - name: Ensure Ghostty configuration directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_facts['env']['HOME'] }}/Library/Application Support/com.mitchellh.ghostty"
+        state: directory
+        mode: "0755"
+
+    - name: Configure Ghostty
+      ansible.builtin.copy:
+        dest: "{{ ansible_facts['env']['HOME'] }}/Library/Application Support/com.mitchellh.ghostty/config.ghostty"
+        mode: "0644"
+        content: |
+          font-family = JetBrains Mono
+          keybind = global:f12=toggle_quick_terminal
+          quick-terminal-position = top
+
+    - name: Install bun globally with npm
+      community.general.npm:
+        name: bun
+        global: true
+        state: latest
+
+    - name: Install Claude Code CLI
+      ansible.builtin.shell: |
+        if command -v claude >/dev/null 2>&1; then
+          echo "ALREADY_INSTALLED"
+        else
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "INSTALLED"
+        fi
+      register: claude_code_install
+      changed_when: "'INSTALLED' in claude_code_install.stdout"
+
+    # `container system start` registers Apple's own launchd jobs and exits, so the
+    # formula's brew service (keep_alive true) respawn-loops with exit 1. Use a plain
+    # RunAtLoad LaunchAgent instead.
+    - name: Install LaunchAgent to start Apple container at login
+      ansible.builtin.copy:
+        dest: "{{ ansible_facts['env']['HOME'] }}/Library/LaunchAgents/com.commandertvis.container-start.plist"
+        mode: "0644"
+        content: |
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>Label</key>
+            <string>com.commandertvis.container-start</string>
+            <key>ProgramArguments</key>
+            <array>
+              <string>/opt/homebrew/bin/container</string>
+              <string>system</string>
+              <string>start</string>
+            </array>
+            <key>RunAtLoad</key>
+            <true/>
+          </dict>
+          </plist>
+
+    - name: Ensure Apple container services are running with a default kernel
+      ansible.builtin.shell: |
+        changed=0
+        if ! container system status >/dev/null 2>&1; then
+          container system start
+          changed=1
+        fi
+        if [ ! -f "$HOME/Library/Application Support/com.apple.container/kernels/default.kernel-arm64" ]; then
+          container system kernel set --recommended
+          changed=1
+        fi
+        [ "$changed" -eq 1 ] && echo "CHANGED" || echo "CLEAN"
+      register: container_setup
+      changed_when: "'CHANGED' in container_setup.stdout"
+
+    # socktainer (the Docker API for Apple container) is run by its Homebrew
+    # service. The old hand-rolled LaunchAgent existed only to pass
+    # --no-check-compatibility back when socktainer pinned Apple container 0.12 and
+    # rejected 1.0; socktainer-next now builds against 1.0, so the service's
+    # version check passes without flags. Two daemons binding the same socket
+    # load-balance requests and corrupt the Docker API, so the obsolete agent must
+    # be removed rather than left to race the brew service.
+    - name: Remove obsolete hand-rolled socktainer LaunchAgent
+      ansible.builtin.shell: |
+        changed=0
+        if launchctl print "gui/$(id -u)/com.commandertvis.socktainer" >/dev/null 2>&1; then
+          launchctl bootout "gui/$(id -u)/com.commandertvis.socktainer" 2>/dev/null || true
+          changed=1
+        fi
+        plist="$HOME/Library/LaunchAgents/com.commandertvis.socktainer.plist"
+        if [ -f "$plist" ]; then
+          rm -f "$plist"
+          changed=1
+        fi
+        [ "$changed" -eq 1 ] && echo "CHANGED" || echo "CLEAN"
+      register: socktainer_cleanup
+      changed_when: "'CHANGED' in socktainer_cleanup.stdout"
+
+    - name: Ensure socktainer brew service is running
+      community.general.homebrew_services:
+        name: socktainer-next
+        state: present
+
+    - name: Ensure apps are login items
+      ansible.builtin.shell: |
+        osascript <<'APPLESCRIPT'
+        tell application "System Events"
+          if not (exists login item "{{ item.name }}") then
+            make login item at end with properties {path:"{{ item.path }}", hidden:false}
+          end if
+        end tell
+        APPLESCRIPT
+      loop:
+        - { name: Syncthing, path: /Applications/Syncthing.app }
+        - { name: MonitorControl, path: /Applications/MonitorControl.app }
+      loop_control:
+        label: "{{ item.name }}"
+      register: login_items
+      changed_when: "'login item' not in login_items.stdout"
+
+    - name: Set DNS to 1.1.1.1 on all network services
+      ansible.builtin.shell: |
+        networksetup -listallnetworkservices | tail -n +2 | while IFS= read -r svc; do
+          networksetup -setdnsservers "$svc" 1.1.1.1 1.0.0.1
+        done
+      become: true
+      changed_when: false
+
+    - name: Check Spotlight indexing status
+      ansible.builtin.command: /usr/bin/mdutil -as
+      register: spotlight_status
+      changed_when: false
+      check_mode: false
+
+    - name: Disable Spotlight indexing on all volumes
+      ansible.builtin.command: /usr/bin/mdutil -a -i off
+      become: true
+      when: "'Indexing enabled.' in spotlight_status.stdout"
+      changed_when: true
+
+    - name: Ensure ~/.ssh/sockets directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_facts['env']['HOME'] }}/.ssh/sockets"
+        state: directory
+        mode: "0700"
+
+    - name: Configure ~/.ssh/config
+      ansible.builtin.copy:
+        dest: "{{ ansible_facts['env']['HOME'] }}/.ssh/config"
+        mode: "0600"
+        content: |
+          # Machine-specific hosts (not tracked in this repo)
+          Include ~/.ssh/config.local
+
+          Host *
+            IdentityAgent "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+
+    - name: Configure macOS defaults
+      community.general.osx_defaults:
+        domain: "{{ item.domain }}"
+        key: "{{ item.key }}"
+        type: "{{ item.type }}"
+        value: "{{ item.value }}"
+      loop:
+        # Dock: auto-hide
+        - { domain: com.apple.dock, key: autohide, type: bool, value: true }
+        # Dock: hide recent apps section
+        - { domain: com.apple.dock, key: show-recents, type: bool, value: false }
+        # Finder: hide recent tags in sidebar
+        - { domain: com.apple.finder, key: ShowRecentTags, type: bool, value: false }
+        # Global: disable natural scrolling
+        - { domain: NSGlobalDomain, key: com.apple.swipescrolldirection, type: bool, value: false }
+        # Global: auto-switch between dark and light mode
+        - { domain: NSGlobalDomain, key: AppleInterfaceStyleSwitchesAutomatically, type: bool, value: true }
+        # Global: double-click title bar does not minimize
+        - { domain: NSGlobalDomain, key: AppleMiniaturizeOnDoubleClick, type: bool, value: false }
+        # Global: mouse tracking speed 2.5
+        - { domain: NSGlobalDomain, key: com.apple.mouse.scaling, type: float, value: 2.5 }
+        # Window Manager: disable tiled window margins
+        - { domain: com.apple.WindowManager, key: EnableTiledWindowMargins, type: bool, value: false }
+        # Window Manager: click desktop hides windows
+        - { domain: com.apple.WindowManager, key: HideDesktop, type: bool, value: true }
+        # Menu bar clock: show AM/PM
+        - { domain: com.apple.menuextra.clock, key: ShowAMPM, type: bool, value: false }
+        # Control Center: show Bluetooth in menu bar
+        - { domain: com.apple.controlcenter, key: "NSStatusItem VisibleCC Bluetooth", type: bool, value: true }
+        # Control Center: show Sound in menu bar
+        - { domain: com.apple.controlcenter, key: "NSStatusItem VisibleCC Sound", type: bool, value: true }
+        # Control Center: show Now Playing in menu bar
+        - { domain: com.apple.controlcenter, key: "NSStatusItem VisibleCC NowPlaying", type: bool, value: true }
+        # Input: show input source (keyboard layout) in menu bar
+        - { domain: com.apple.TextInputMenu, key: visible, type: bool, value: true }
+
+    - name: Configure global Git config
+      community.general.git_config:
+        name: "{{ item.name }}"
+        scope: global
+        value: "{{ item.value }}"
+      loop:
+        - { name: init.defaultBranch, value: master }
+        - { name: user.name, value: "Iaroslav Postovalov" }
+        - { name: user.email, value: "postovalovya@gmail.com" }
+        - { name: core.autocrlf, value: input }
+        - name: user.signingkey
+          value: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPhrNPHMWPV7gGuPheIX4POXrlPNNL2h/KMAJsAuSA0W"
+        - { name: gpg.format, value: "ssh" }
+        - {
+          name: gpg.ssh.program,
+          value: "/Applications/1Password.app/Contents/MacOS/op-ssh-sign",
+        }
+        - { name: commit.gpgsign, value: "true" }
+
+    - name: Write .zprofile
+      ansible.builtin.copy:
+        dest: "{{ ansible_facts['env']['HOME'] }}/.zprofile"
+        mode: "0644"
+        content: |
+          eval "$(/opt/homebrew/bin/brew shellenv)"
+
+          # SDKMAN
+          export SDKMAN_DIR=$(brew --prefix sdkman-cli)/libexec
+          [[ -s "${SDKMAN_DIR}/bin/sdkman-init.sh" ]] && source "${SDKMAN_DIR}/bin/sdkman-init.sh"
+
+          # Added by Toolbox App
+          export PATH="$PATH:/Users/commandertvis/Library/Application Support/JetBrains/Toolbox/scripts"
+
+          # Claude Code (native install)
+          export PATH="$HOME/.local/bin:$PATH"
+
+          # Docker-compatible API served by socktainer (Apple container backend)
+          export DOCKER_HOST="unix://$HOME/.socktainer/container.sock"
+
+          # Default editor: Zed (--wait = callers block until the buffer closes)
+          export EDITOR="zed --wait"
+          export VISUAL="zed --wait"
+
+    - name: Write .zshrc
+      ansible.builtin.copy:
+        dest: "{{ ansible_facts['env']['HOME'] }}/.zshrc"
+        mode: "0644"
+        content: |
+          # ytmp4 alias - download and convert to MP4 using yt-dlp
+          alias ytmp4='uvx yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" --merge-output-format mp4'
+
+          # ytmp3 alias - download and convert to MP3 using yt-dlp
+          alias ytmp3='uvx yt-dlp -f "bestaudio" --extract-audio --audio-format mp3 --audio-quality 0'
+
+    - name: Enable SDKMAN auto-answer for non-interactive use
+      ansible.builtin.lineinfile:
+        path: "{{ sdkman_dir }}/etc/config"
+        regexp: '^sdkman_auto_answer='
+        line: sdkman_auto_answer=true
+
+    - name: Manage GraalVM versions via SDKMAN (install, default, prune)
+      vars:
+        graalvm_majors: ["25", "21"]
+      ansible.builtin.shell: |
+        export SDKMAN_DIR={{ sdkman_dir }}
+        source "${SDKMAN_DIR}/bin/sdkman-init.sh"
+        majors=({{ graalvm_majors | join(' ') }})
+        managed=()
+        changed=0
+        for major in "${majors[@]}"; do
+          id=$(sdk list java | grep -oE "${major}\.[0-9.]*-graal" | head -1)
+          managed+=("$id")
+          if [ ! -d "${SDKMAN_DIR}/candidates/java/${id}" ]; then
+            echo "INSTALL java ${id}"
+            sdk install java "$id"
+            changed=1
+          fi
+        done
+        sdk default java "${managed[0]}"
+        for dir in "${SDKMAN_DIR}/candidates/java"/*/; do
+          ver=$(basename "$dir")
+          [ "$ver" = "current" ] && continue
+          keep=0
+          for m in "${managed[@]}"; do
+            [ "$ver" = "$m" ] && keep=1 && break
+          done
+          if [ "$keep" -eq 0 ]; then
+            echo "UNINSTALL java ${ver}"
+            sdk uninstall java "$ver"
+            changed=1
+          fi
+        done
+        [ "$changed" -eq 1 ] && echo "CHANGED" || echo "CLEAN"
+      args:
+        executable: /bin/bash
+      register: sdk_manage
+      changed_when: "'CHANGED' in sdk_manage.stdout"
+
+    # Visibility only: surface which JDKs the task above installed/removed,
+    # without needing to run ansible-playbook in verbose mode.
+    - name: Show GraalVM changes
+      ansible.builtin.debug:
+        msg: "{{ sdk_manage.stdout_lines | select('match', '^(INSTALL|UNINSTALL) ') | list }}"
+      when: "'CHANGED' in sdk_manage.stdout"
+
+    - name: Gather installed packages and dependencies
+      block:
+        - name: List installed formulae
+          ansible.builtin.command: brew list --formula -1
+          register: installed_formulae
+          changed_when: false
+        - name: List installed casks
+          ansible.builtin.command: brew list --cask -1
+          register: installed_casks
+          changed_when: false
+        - name: Gather managed dependencies
+          ansible.builtin.command: |
+            brew deps --union --include-build --include-optional {{ homebrew_packages | join(' ') }}
+          register: managed_deps
+          changed_when: false
+          failed_when: false
+
+    - name: Prune unmanaged packages
+      vars:
+        installed: "{{ installed_formulae.stdout_lines + installed_casks.stdout_lines }}"
+        managed: "{{ homebrew_packages + homebrew_cask_apps + homebrew_protected }}"
+        dependencies: "{{ managed_deps.stdout_lines | default([]) }}"
+        unmanaged: "{{ installed | difference(managed + dependencies) }}"
+      when: unmanaged is defined and unmanaged | length > 0
+      block:
+        - name: Confirm pruning
+          ansible.builtin.pause:
+            prompt: |
+              The following unmanaged packages will be pruned:
+              {{ unmanaged | to_nice_yaml }}
+              Press Enter to continue, or Ctrl+C and then 'A' to abort.
+
+        - name: Remove packages with dependencies
+          ansible.builtin.shell: |
+            for pkg in {{ unmanaged | join(' ') }}; do
+              if brew list --formula | grep -q "^$pkg$"; then
+                # Check if this package has dependents in our unmanaged list
+                dependents=$(brew uses --installed --recursive $pkg 2>/dev/null | grep -E '^({{ unmanaged | join('|') }})$' | wc -l || echo 0)
+                if [ "$dependents" -gt 0 ]; then
+                  echo "Skipping $pkg - has dependents"
+                else
+                  echo "Removing $pkg - no dependents in unmanaged list"
+                  brew uninstall $pkg 2>/dev/null || echo "Failed to remove $pkg"
+                fi
+              elif brew list --cask | grep -q "^$pkg$"; then
+                echo "Removing cask $pkg"
+                /usr/bin/expect <<EOF
+            spawn brew uninstall --cask --force $pkg
+            expect {
+              "Password:" {
+                send "{{ ansible_become_password }}\r"
+                exp_continue
+              }
+              eof
+            }
+            EOF
+              fi
+            done
+          register: first_pass_removal
+          changed_when: "'Removing' in first_pass_removal.stdout"
+          no_log: true
+
+        - name: Remove remaining dependencies with force flag
+          ansible.builtin.shell: |
+            for pkg in {{ unmanaged | join(' ') }}; do
+              if brew list --formula | grep -q "^$pkg$" 2>/dev/null; then
+                echo "Force removing remaining package: $pkg"
+                brew uninstall --ignore-dependencies $pkg 2>/dev/null || echo "Failed to force remove $pkg"
+              fi
+            done
+          register: second_pass_removal
+          changed_when: "'Force removing' in second_pass_removal.stdout"

@@ -1,0 +1,60 @@
+#!/bin/bash
+set -e
+
+# ansible-core 2.21 derives the connection user from getpass.getuser(), which
+# prefers $LOGNAME. macOS zsh sets LOGNAME from getlogin(), which can report a
+# stale utmpx owner (e.g. root) for the tty; ansible then tries to use
+# /var/root/.ansible/tmp and every task is UNREACHABLE.
+export LOGNAME="$(id -un)"
+
+# Check OS and set playbook
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    PLAYBOOK="macos.yml"
+    # Homebrew 5+ asks for confirmation before installing/upgrading by default,
+    # which hangs this script and every brew call the playbook makes. Exported so
+    # ansible-playbook inherits it.
+    export HOMEBREW_NO_ASK=1
+elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    # Check Ubuntu version
+    if ! grep -q "Ubuntu 26.04" /etc/os-release; then
+        echo "Error: Only Ubuntu 26.04 is supported on Linux"
+        exit 1
+    fi
+    # Warn if Kubuntu is not installed (playbook will install it)
+    if ! dpkg -l kubuntu-desktop 2>/dev/null | grep -q '^ii'; then
+        echo "Warning: kubuntu-desktop not installed. The playbook will install it."
+    fi
+    PLAYBOOK="kubuntu.yml"
+else
+    echo "Error: Unsupported operating system"
+    exit 1
+fi
+
+# Install/upgrade Ansible. On macOS this must happen here, not in the playbook:
+# upgrading the running ansible from a task replaces its own files mid-run and
+# breaks module result deserialization (module_legacy_m2c).
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    brew install -q ansible ansible-lint
+elif ! command -v ansible-playbook >/dev/null 2>&1; then
+    sudo apt update
+    sudo apt install -y ansible
+fi
+
+ansible-galaxy collection install -r requirements.yml --upgrade
+
+# Run ansible-playbook with OS-specific options
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # Password is collected manually and passed two ways:
+    # 1. --become-password-file: feeds the become plugin for `become: true` tasks
+    # 2. -e ansible_become_password: exposes it as a template variable for
+    #    homebrew_cask's sudo_password parameter (-K alone does not do this)
+    IFS= read -rsp "Enter your password for privilege escalation: " PASSWORD
+    echo
+    ansible-playbook -i 'localhost,' -c local "$PLAYBOOK" \
+        --become-password-file <(printf '%s' "$PASSWORD") \
+        -e "ansible_become_password=$(printf '%s' "$PASSWORD" | python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))')" "$@"
+    unset PASSWORD
+else
+    # Use local connection with passwordless sudo
+    ANSIBLE_CONFIG=kubuntu.cfg ansible-playbook -i 'localhost,' -c local "$PLAYBOOK" "$@"
+fi
