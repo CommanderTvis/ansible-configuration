@@ -108,6 +108,8 @@
         repo: https://github.com/CommanderTvis/hue-manager.git
         dest: "{{ homebrew_repository.stdout }}/Library/Taps/commandertvis/homebrew-hue-manager"
         version: brew
+        # The rolling nightly tag is moved upstream between releases.
+        force: true
 
     - name: Gather pre-install Homebrew state
       block:
