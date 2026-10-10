@@ -408,10 +408,6 @@
           # Docker-compatible API served by socktainer (Apple container backend)
           export DOCKER_HOST="unix://$HOME/.socktainer/container.sock"
 
-          # Default editor: Zed (--wait = callers block until the buffer closes)
-          export EDITOR="zed --wait"
-          export VISUAL="zed --wait"
-
     - name: Write .zshrc
       ansible.builtin.copy:
         dest: "{{ ansible_facts['env']['HOME'] }}/.zshrc"
