@@ -32,11 +32,12 @@
       - rustup
       - tea # Gitea/Forgejo CLI
     sdkman_dir: /opt/homebrew/opt/sdkman-cli/libexec
+    tappi_version: "1.2.0"
+    tappi_checksum: sha256:db3a06754dd08f0c13bda9b88583f61111d7976d939b474a47b27a48c9c0d748
     homebrew_taps:
       - { name: sdkman/tap }
       - { name: jetbrains/utils }
       - { name: socktainer/tap }
-      - { name: leonatwork/tap }
     homebrew_protected:
       # tapped formulae are listed by `brew list` without the tap prefix, so
       # protect the bare names to keep the pruner from flagging them.
@@ -61,7 +62,6 @@
       - tailscale-app
       - font-jetbrains-mono
       - jetbrains-toolbox
-      - tappi
       - flux-app
       - philips-hue-sync
       - hue-manager
@@ -166,7 +166,55 @@
         accept_external_apps: true
         sudo_password: "{{ ansible_become_password }}"
 
-    # Tappi is ad-hoc signed, not notarized, and Homebrew dropped --no-quarantine.
+    - name: Read installed Tappi version
+      ansible.builtin.command: /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' /Applications/Tappi.app/Contents/Info.plist
+      register: tappi_installed_version
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Install Tappi from GitHub release
+      when: tappi_installed_version.stdout != tappi_version
+      block:
+        - name: Create Tappi download directory
+          ansible.builtin.tempfile:
+            state: directory
+            prefix: tappi-
+          register: tappi_download
+
+        - name: Download Tappi release
+          ansible.builtin.get_url:
+            url: "https://github.com/leonatwork/Tappi/releases/download/v{{ tappi_version }}/Tappi-v{{ tappi_version }}.zip"
+            dest: "{{ tappi_download.path }}/Tappi.zip"
+            checksum: "{{ tappi_checksum }}"
+            mode: "0644"
+          when: not ansible_check_mode
+
+        - name: Extract Tappi release
+          ansible.builtin.command: /usr/bin/ditto -x -k {{ tappi_download.path }}/Tappi.zip {{ tappi_download.path }}
+          changed_when: true
+          when: not ansible_check_mode
+
+        - name: Remove previous Tappi application
+          ansible.builtin.file:
+            path: /Applications/Tappi.app
+            state: absent
+          become: true
+          when: not ansible_check_mode
+
+        - name: Install Tappi application
+          ansible.builtin.command: /usr/bin/ditto {{ tappi_download.path }}/Tappi.app /Applications/Tappi.app
+          become: true
+          changed_when: true
+          when: not ansible_check_mode
+      always:
+        - name: Clean up Tappi download
+          ansible.builtin.file:
+            path: "{{ tappi_download.path }}"
+            state: absent
+          when: tappi_download.path is defined
+
+    # Tappi is ad-hoc signed, not notarized.
     - name: Check Tappi quarantine flag
       ansible.builtin.command: /usr/bin/xattr -p com.apple.quarantine /Applications/Tappi.app
       register: tappi_quarantine
