@@ -8,7 +8,6 @@ This project contains local Ansible playbooks for setting up and maintaining my 
 
 - Installs and configures standard development and productivity packages
 - Sets up global Git configuration with 1Password SSH signing
-- Manages GraalVM 25 and 21 through SDKMAN, selects 25 as the default, and removes other installed Java candidates
 - Shows pending package installations and upgrades
 
 ### macOS Specific
@@ -18,9 +17,9 @@ This project contains local Ansible playbooks for setting up and maintaining my 
 - Installs and upgrades Bun globally via npm
 - Installs Python package manager (uv) via Homebrew
 - Installs Rosetta 2 if needed and Claude Code via its native installer
-- Configures Apple container and the socktainer Docker API service
 - Configures Ghostty, shell profiles, SSH, login items, and macOS preferences
 - Sets network-service DNS servers to Cloudflare's `1.1.1.1` and `1.0.0.1`
+- Removes the roots behind the compromised eMudhra intermediate CAs from `/etc/ssl/cert.pem`, the bundle `/usr/bin/curl` and Git use without revocation checks
 - Upgrades managed formulae and casks, plus outdated formulae outside the protected list
 - Prunes unmanaged Homebrew packages with user confirmation
 
@@ -30,6 +29,7 @@ This project contains local Ansible playbooks for setting up and maintaining my 
 - Installs Flatpak and selected Flatpak applications (Obsidian, Anki, Zulip, Popsicle, Zed)
 - Bootstraps uv through pipx and protects the system Python environment against pip installs
 - Installs Bun and provides Claude Code and yt-dlp wrappers through bunx and uvx
+- Manages GraalVM 25 and 21 through SDKMAN, selects 25 as the default, and removes other installed Java candidates
 - Performs a full APT upgrade
 - Enables and starts Syncthing service for file synchronization
 - Prunes unmanaged Flatpak applications and APT packages with user confirmation

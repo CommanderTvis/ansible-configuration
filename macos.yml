@@ -16,20 +16,14 @@
       - ripgrep
       - llvm # clangd
       - deno # for yt-dlp
-      - container # Apple container
-      # -next prerelease: stable socktainer pins Apple container 0.11 and rejects 1.0
-      - socktainer/tap/socktainer-next
       - hcloud # Hetzner Cloud
       - tea # Gitea/Forgejo CLI
       - tectonic
+      - mise
     tappi_version: "1.2.0"
     tappi_checksum: sha256:db3a06754dd08f0c13bda9b88583f61111d7976d939b474a47b27a48c9c0d748
-    homebrew_taps:
-      - { name: socktainer/tap }
+    homebrew_taps: []
     homebrew_protected:
-      # tapped formulae are listed by `brew list` without the tap prefix, so
-      # protect the bare names to keep the pruner from flagging them.
-      - socktainer-next
       # ansible/ansible-lint are upgraded by build.sh before the playbook runs —
       # upgrading the running ansible from any task (even the last one) replaces
       # its own files and breaks result deserialization (module_legacy_m2c).
@@ -244,74 +238,6 @@
       register: claude_code_install
       changed_when: "'INSTALLED' in claude_code_install.stdout"
 
-    # `container system start` registers Apple's own launchd jobs and exits, so the
-    # formula's brew service (keep_alive true) respawn-loops with exit 1. Use a plain
-    # RunAtLoad LaunchAgent instead.
-    - name: Install LaunchAgent to start Apple container at login
-      ansible.builtin.copy:
-        dest: "{{ ansible_facts['env']['HOME'] }}/Library/LaunchAgents/com.commandertvis.container-start.plist"
-        mode: "0644"
-        content: |
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>Label</key>
-            <string>com.commandertvis.container-start</string>
-            <key>ProgramArguments</key>
-            <array>
-              <string>/opt/homebrew/bin/container</string>
-              <string>system</string>
-              <string>start</string>
-            </array>
-            <key>RunAtLoad</key>
-            <true/>
-          </dict>
-          </plist>
-
-    - name: Ensure Apple container services are running with a default kernel
-      ansible.builtin.shell: |
-        changed=0
-        if ! container system status >/dev/null 2>&1; then
-          container system start
-          changed=1
-        fi
-        if [ ! -f "$HOME/Library/Application Support/com.apple.container/kernels/default.kernel-arm64" ]; then
-          container system kernel set --recommended
-          changed=1
-        fi
-        [ "$changed" -eq 1 ] && echo "CHANGED" || echo "CLEAN"
-      register: container_setup
-      changed_when: "'CHANGED' in container_setup.stdout"
-
-    # socktainer (the Docker API for Apple container) is run by its Homebrew
-    # service. The old hand-rolled LaunchAgent existed only to pass
-    # --no-check-compatibility back when socktainer pinned Apple container 0.12 and
-    # rejected 1.0; socktainer-next now builds against 1.0, so the service's
-    # version check passes without flags. Two daemons binding the same socket
-    # load-balance requests and corrupt the Docker API, so the obsolete agent must
-    # be removed rather than left to race the brew service.
-    - name: Remove obsolete hand-rolled socktainer LaunchAgent
-      ansible.builtin.shell: |
-        changed=0
-        if launchctl print "gui/$(id -u)/com.commandertvis.socktainer" >/dev/null 2>&1; then
-          launchctl bootout "gui/$(id -u)/com.commandertvis.socktainer" 2>/dev/null || true
-          changed=1
-        fi
-        plist="$HOME/Library/LaunchAgents/com.commandertvis.socktainer.plist"
-        if [ -f "$plist" ]; then
-          rm -f "$plist"
-          changed=1
-        fi
-        [ "$changed" -eq 1 ] && echo "CHANGED" || echo "CLEAN"
-      register: socktainer_cleanup
-      changed_when: "'CHANGED' in socktainer_cleanup.stdout"
-
-    - name: Ensure socktainer brew service is running
-      community.general.homebrew_services:
-        name: socktainer-next
-        state: present
-
     - name: Ensure apps are login items
       ansible.builtin.shell: |
         osascript <<'APPLESCRIPT'
@@ -415,8 +341,25 @@
         - { domain: com.apple.controlcenter, key: "NSStatusItem VisibleCC Sound", type: bool, value: true }
         # Control Center: show Now Playing in menu bar
         - { domain: com.apple.controlcenter, key: "NSStatusItem VisibleCC NowPlaying", type: bool, value: true }
+        # Chrome: never download the on-device Gemini Nano model (~4 GB)
+        - { domain: com.google.Chrome, key: GenAILocalFoundationalModelSettings, type: int, value: 1 }
         # Input: show input source (keyboard layout) in menu bar
         - { domain: com.apple.TextInputMenu, key: visible, type: bool, value: true }
+
+    # rcd (Remote Control Daemon) launches Music whenever a media key is pressed
+    # and nothing else is playing. Music itself lives on the sealed system volume
+    # and cannot be removed, so the launcher is disabled instead.
+    - name: Disable rcd so media keys don't launch Music
+      ansible.builtin.shell: |
+        if launchctl print-disabled "gui/$(id -u)" | grep -q '"com.apple.rcd" => disabled'; then
+          echo "CLEAN"
+        else
+          launchctl bootout "gui/$(id -u)/com.apple.rcd" 2>/dev/null || true
+          launchctl disable "gui/$(id -u)/com.apple.rcd"
+          echo "CHANGED"
+        fi
+      register: rcd_disable
+      changed_when: "'CHANGED' in rcd_disable.stdout"
 
     - name: Configure global Git config
       community.general.git_config:
@@ -448,8 +391,6 @@
           # Claude Code (native install)
           export PATH="$HOME/.local/bin:$PATH"
 
-          # Docker-compatible API served by socktainer (Apple container backend)
-          export DOCKER_HOST="unix://$HOME/.socktainer/container.sock"
 
     - name: Write .zshrc
       ansible.builtin.copy:
