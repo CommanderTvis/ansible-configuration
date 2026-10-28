@@ -227,6 +227,17 @@
         global: true
         state: latest
 
+    - name: Read installed bun version
+      ansible.builtin.command: bun --version
+      register: bun_version
+      changed_when: false
+
+    - name: Assert bun is at least 1.4.4
+      ansible.builtin.assert:
+        that: bun_version.stdout | trim is version('1.4.4', '>=')
+        fail_msg: "bun {{ bun_version.stdout | trim }} is older than the required minimum 1.4.4"
+        quiet: true
+
     - name: Install Claude Code CLI
       ansible.builtin.shell: |
         if command -v claude >/dev/null 2>&1; then
@@ -360,6 +371,20 @@
         fi
       register: rcd_disable
       changed_when: "'CHANGED' in rcd_disable.stdout"
+
+    # Indexing is already off, but the Spotlight UI agent (search window) still
+    # idles at ~150 MB. It is a per-user launch agent, so disable it the same way.
+    - name: Disable Spotlight UI agent
+      ansible.builtin.shell: |
+        if launchctl print-disabled "gui/$(id -u)" | grep -q '"com.apple.Spotlight" => disabled'; then
+          echo "CLEAN"
+        else
+          launchctl bootout "gui/$(id -u)/com.apple.Spotlight" 2>/dev/null || true
+          launchctl disable "gui/$(id -u)/com.apple.Spotlight"
+          echo "CHANGED"
+        fi
+      register: spotlight_disable
+      changed_when: "'CHANGED' in spotlight_disable.stdout"
 
     - name: Configure global Git config
       community.general.git_config:
